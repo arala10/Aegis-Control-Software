@@ -6,7 +6,7 @@ local configFilePath = "config.json"
 -- Physics constants
 local GRAVITY = 0.05  -- Minecraft gravity in blocks/tick²
 local MAX_ITERATIONS = 1000  -- Maximum number of simulation steps
-local TIME_STEP = 1  -- Simulation time step in ticks
+local TIME_STEP = 0.025  -- Simulation time step in ticks
 
 -- Function to calculate drag coefficient based on angle
 local function getDragCoefficient(angle)
@@ -18,38 +18,39 @@ local function getDragCoefficient(angle)
     elseif angle >= 15 then
         return 0.0095
     else
-        return 0.01
+        return 0.0091
     end
 end
 
 -- Function to simulate projectile trajectory
 local function simulateProjectile(startX, startY, startZ, velocity, pitch, yaw)
-    local vx = velocity * math.cos(math.rad(pitch)) * math.sin(math.rad(yaw))
+    local vx = velocity * math.cos(math.rad(pitch)) * math.cos(math.rad(yaw))
     local vy = velocity * math.sin(math.rad(pitch))
-    local vz = velocity * math.cos(math.rad(pitch)) * math.cos(math.rad(yaw))
+    local vz = velocity * math.cos(math.rad(pitch)) * math.sin(math.rad(yaw))
     
     local x, y, z = startX, startY, startZ
     local dragCoeff = getDragCoefficient(pitch)
+    local dragFactor = 1 - (dragCoeff * 20)
+    local gravity = GRAVITY * (20^2)
+    
     
     for i = 1, MAX_ITERATIONS do
         -- Update position
-        x = x + vx
-        y = y + vy
-        z = z + vz
         
         -- Apply drag
-        local speed = math.sqrt(vx*vx + vy*vy + vz*vz)
-        local dragFactor = 1 - dragCoeff * speed
-        vx = vx * dragFactor
-        vy = vy * dragFactor
-        vz = vz * dragFactor
+        vx = vx * (dragFactor^TIME_STEP)
+        vy = vy * (dragFactor^TIME_STEP)
+        vz = vz * (dragFactor^TIME_STEP)
         
         -- Apply gravity
-        vy = vy - GRAVITY
+        vy = vy - gravity * TIME_STEP
         
+        x = x + vx * TIME_STEP
+        y = y + vy * TIME_STEP
+        z = z + vz * TIME_STEP
         -- Check if projectile has hit the ground
         if y <= 0 then
-            return x, 0, z, i * TIME_STEP  -- Return landing coordinates and time
+            return x, y, z, i * TIME_STEP  -- Return landing coordinates and time
         end
     end
     
@@ -66,10 +67,8 @@ local function calculatePitchForTarget(startX, startY, startZ, targetX, targetY,
     -- Try various pitch angles to find the best one
     for pitch = 0, 60, 1 do
         local landX, landY, landZ, flightTime = simulateProjectile(startX, startY, startZ, initialVelocity, pitch, yaw)
-        
         if landX and landY and landZ then
             local distance = math.sqrt((landX - targetX)^2 + (landZ - targetZ)^2)
-            
             if distance < bestDistance then
                 bestDistance = distance
                 bestPitch = pitch
@@ -267,13 +266,24 @@ local function findYaw(targetPoint)
     local basePoint = vector.new(baseData.centerPoint.x, 0, baseData.centerPoint.z)
     local muzzleEndPoint = vector.new(baseData.muzzlePoint.x, 0, baseData.muzzlePoint.z)
 
-    local forwwadVector = muzzleEndPoint - basePoint
-    forwwadVector = forwwadVector:normalize()
+    local forwardVector = muzzleEndPoint - basePoint
+    forwardVector = forwardVector:normalize()
     
     local targetVector = targetPoint - basePoint
     targetVector = targetVector:normalize()
 
-    local radian_angle = math.acos(forwwadVector:dot(targetVector))
+    -- Calculate the angle between vectors
+    local dotProduct = forwardVector:dot(targetVector)
+    local radian_angle = math.acos(math.min(1, math.max(-1, dotProduct)))
+    
+    -- Determine the direction (clockwise or counter-clockwise)
+    -- Using cross product to determine direction
+    local crossProduct = forwardVector.x * targetVector.z - forwardVector.z * targetVector.x
+    
+    -- If cross product is negative, angle is clockwise (negative)
+    if crossProduct < 0 then
+        radian_angle = -radian_angle
+    end
     
     return math.deg(radian_angle)
 end
@@ -309,18 +319,17 @@ local function executeFireMission()
         local yawAngle = findYaw(targetPoint)
         
         -- Calculate distance to target (2D)
-        local startX = config.centerPoint.x
-        local startY = config.centerPoint.y or 0
-        local startZ = config.centerPoint.z
         local targetX = mission.point.x
         local targetY = mission.point.y or 0
         local targetZ = mission.point.z
-        
+        local startX = config.centerPoint.x + 9 * math.cos(math.rad(yawAngle))
+        local startY = math.abs(config.centerPoint.y - targetY) or 0
+        local startZ = config.centerPoint.z + 9 * math.sin(math.rad(yawAngle))
         -- Calculate pitch using physics simulation
         print("Calculating optimal pitch angle...")
         local pitchAngle, expectedError = calculatePitchForTarget(
             startX, startY, startZ, 
-            targetX, targetY, targetZ, 
+            targetX, targetY, targetZ,
             yawAngle
         )
         
