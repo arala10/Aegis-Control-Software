@@ -3,6 +3,98 @@ local control = require "canonControl"
 local missionTablePath = "mission_table.json"
 local configFilePath = "config.json"
 
+-- Physics constants
+local GRAVITY = 0.05  -- Minecraft gravity in blocks/tick²
+local MAX_ITERATIONS = 1000  -- Maximum number of simulation steps
+local TIME_STEP = 1  -- Simulation time step in ticks
+
+-- Function to calculate drag coefficient based on angle
+local function getDragCoefficient(angle)
+    angle = math.abs(angle)
+    if angle >= 25 then
+        return 0.009375
+    elseif angle >= 20 then
+        return 0.0096875
+    elseif angle >= 15 then
+        return 0.0095
+    else
+        return 0.01
+    end
+end
+
+-- Function to simulate projectile trajectory
+local function simulateProjectile(startX, startY, startZ, velocity, pitch, yaw)
+    local vx = velocity * math.cos(math.rad(pitch)) * math.sin(math.rad(yaw))
+    local vy = velocity * math.sin(math.rad(pitch))
+    local vz = velocity * math.cos(math.rad(pitch)) * math.cos(math.rad(yaw))
+    
+    local x, y, z = startX, startY, startZ
+    local dragCoeff = getDragCoefficient(pitch)
+    
+    for i = 1, MAX_ITERATIONS do
+        -- Update position
+        x = x + vx
+        y = y + vy
+        z = z + vz
+        
+        -- Apply drag
+        local speed = math.sqrt(vx*vx + vy*vy + vz*vz)
+        local dragFactor = 1 - dragCoeff * speed
+        vx = vx * dragFactor
+        vy = vy * dragFactor
+        vz = vz * dragFactor
+        
+        -- Apply gravity
+        vy = vy - GRAVITY
+        
+        -- Check if projectile has hit the ground
+        if y <= 0 then
+            return x, 0, z, i * TIME_STEP  -- Return landing coordinates and time
+        end
+    end
+    
+    -- If we reach here, the projectile didn't land within MAX_ITERATIONS
+    return nil, nil, nil, nil
+end
+
+-- Function to calculate pitch angle for a target
+local function calculatePitchForTarget(startX, startY, startZ, targetX, targetY, targetZ, yaw)
+    local initialVelocity = 160.0  -- Initial projectile velocity in blocks/tick
+    local bestPitch = 31  -- Default pitch if calculation fails
+    local bestDistance = math.huge
+    
+    -- Try various pitch angles to find the best one
+    for pitch = 0, 60, 1 do
+        local landX, landY, landZ, flightTime = simulateProjectile(startX, startY, startZ, initialVelocity, pitch, yaw)
+        
+        if landX and landY and landZ then
+            local distance = math.sqrt((landX - targetX)^2 + (landZ - targetZ)^2)
+            
+            if distance < bestDistance then
+                bestDistance = distance
+                bestPitch = pitch
+            end
+        end
+    end
+    
+    -- Fine-tune the pitch
+    for pitch = bestPitch - 0.9, bestPitch + 0.9, 0.1 do
+        local landX, landY, landZ, flightTime = simulateProjectile(startX, startY, startZ, initialVelocity, pitch, yaw)
+        
+        if landX and landY and landZ then
+            local distance = math.sqrt((landX - targetX)^2 + (landZ - targetZ)^2)
+            
+            if distance < bestDistance then
+                bestDistance = distance
+                bestPitch = pitch
+            end
+        end
+    end
+    
+    return bestPitch, bestDistance
+end
+
+
 local function addFireMission()
     common.termClear()
     print("=====Add Fire Mission=====")
@@ -191,6 +283,10 @@ local function executeFireMission()
     print("=====Execute Fire Missions=====")
     
     local missionList = common.readFromJsonFile(missionTablePath) or {}
+    local config = common.readFromJsonFile(configFilePath) or {
+        centerPoint = {x=0, y=0, z=0},
+        muzzlePoint = {x=0, y=0, z=0}
+    }
     
     if #missionList == 0 then
         print("No fire missions found.")
@@ -208,17 +304,37 @@ local function executeFireMission()
         print("Target: X=" .. mission.point.x .. ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z)
         print("Munition: " .. mission.munition)
         
+        -- Calculate yaw
         local targetPoint = vector.new(mission.point.x, 0, mission.point.z)
         local yawAngle = findYaw(targetPoint)
         
-        print("Calculated Yaw: " .. yawAngle)
+        -- Calculate distance to target (2D)
+        local startX = config.centerPoint.x
+        local startY = config.centerPoint.y or 0
+        local startZ = config.centerPoint.z
+        local targetX = mission.point.x
+        local targetY = mission.point.y or 0
+        local targetZ = mission.point.z
+        
+        -- Calculate pitch using physics simulation
+        print("Calculating optimal pitch angle...")
+        local pitchAngle, expectedError = calculatePitchForTarget(
+            startX, startY, startZ, 
+            targetX, targetY, targetZ, 
+            yawAngle
+        )
+        
+        print("Calculated Yaw: " .. string.format("%.2f", yawAngle) .. "°")
+        print("Calculated Pitch: " .. string.format("%.2f", pitchAngle) .. "°")
+        print("Expected accuracy: " .. string.format("%.2f", expectedError) .. " blocks")
+        sleep(1)
         
         local yawData = {}
         yawData['angle'] = yawAngle
         yawData['id'] = 0
         
         local pitchData = {}
-        pitchData['angle'] = 0  -- You might want to calculate pitch based on distance/elevation
+        pitchData['angle'] = pitchAngle
         pitchData['id'] = 1
         
         print("Moving cannon...")
