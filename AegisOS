@@ -198,6 +198,7 @@ function AegisOS.utils.renderLoadingBar(startY, width, steps, message)
 end
 
 -- UI Module
+AegisOS.ui = {}-- UI Module with keyboard navigation
 AegisOS.ui = {}
 
 function AegisOS.ui.drawHeader(title)
@@ -217,13 +218,51 @@ end
 function AegisOS.ui.showMenu(title, options)
     AegisOS.ui.drawHeader(title)
     
-    for i, option in ipairs(options) do
-        print(i .. ". " .. option)
+    local selectedOption = 1
+    local running = true
+    local w, h = term.getSize()
+    
+    -- Function to draw the menu
+    local function drawMenu()
+        -- Clear the menu area (below header)
+        for i = 4, h do
+            term.setCursorPos(1, i)
+            term.write(string.rep(" ", w))
+        end
+        
+        term.setCursorPos(1, 4)
+        for i, option in ipairs(options) do
+            if i == selectedOption then
+                print("[ " .. option .. " ]")
+            else
+                print("  " .. option .. "  ")
+            end
+        end
+        
+        term.setCursorPos(1, h)
+        term.write("Use Up/Down arrows or W/S keys to navigate, Enter to select")
     end
     
-    print("\nSelect option:")
-    local choice = tonumber(read())
-    return choice
+    -- Initial draw
+    drawMenu()
+    
+    -- Handle user input
+    while running do
+        local event, key = os.pullEvent("key")
+        
+        -- Handle navigation
+        if key == keys.up or key == keys.w then
+            selectedOption = selectedOption > 1 and selectedOption - 1 or #options
+            drawMenu()
+        elseif key == keys.down or key == keys.s then
+            selectedOption = selectedOption < #options and selectedOption + 1 or 1
+            drawMenu()
+        elseif key == keys.enter then
+            running = false
+        end
+    end
+    
+    return selectedOption
 end
 
 function AegisOS.ui.prompt(message, defaultValue)
@@ -245,6 +284,109 @@ function AegisOS.ui.showMessage(message, pause)
         print("\nPress Enter to continue...")
         read()
     end
+end
+
+-- Enhanced UI for list selection with keyboard navigation
+function AegisOS.ui.selectFromList(title, items, displayFunc)
+    AegisOS.ui.drawHeader(title)
+    
+    if #items == 0 then
+        AegisOS.ui.showMessage("No items found.", 2)
+        return nil
+    end
+    
+    local selectedItem = 1
+    local startIndex = 1
+    local maxDisplay = 10  -- Maximum number of items to display at once
+    local running = true
+    local w, h = term.getSize()
+    
+    -- Function to display a single item
+    local function displayItem(item, index, isSelected)
+        local prefix = isSelected and "[ " or "  "
+        local suffix = isSelected and " ]" or "  "
+        
+        if displayFunc then
+            return prefix .. displayFunc(item, index) .. suffix
+        else
+            return prefix .. tostring(item) .. suffix
+        end
+    end
+    
+    -- Function to draw the list
+    local function drawList()
+        -- Clear the display area
+        for i = 4, h-2 do
+            term.setCursorPos(1, i)
+            term.write(string.rep(" ", w))
+        end
+        
+        -- Display items
+        local endIndex = math.min(startIndex + maxDisplay - 1, #items)
+        for i = startIndex, endIndex do
+            term.setCursorPos(1, 4 + (i - startIndex))
+            print(displayItem(items[i], i, i == selectedItem))
+        end
+        
+        -- Display navigation help
+        term.setCursorPos(1, h-1)
+        term.write(string.rep("-", w))
+        term.setCursorPos(1, h)
+        term.write("Use Up/Down arrows to navigate, Enter to select, Esc to cancel")
+        
+        -- Display pagination info if needed
+        if #items > maxDisplay then
+            local pageInfo = "Page " .. math.ceil(startIndex/maxDisplay) .. "/" .. math.ceil(#items/maxDisplay)
+            term.setCursorPos(w - #pageInfo, h-1)
+            term.write(pageInfo)
+        end
+    end
+    
+    -- Initial draw
+    drawList()
+    
+    -- Handle user input
+    while running do
+        local event, key = os.pullEvent("key")
+        
+        -- Handle navigation
+        if key == keys.up or key == keys.w then
+            selectedItem = selectedItem > 1 and selectedItem - 1 or #items
+            
+            -- Adjust view if selection is out of view
+            if selectedItem < startIndex then
+                startIndex = selectedItem
+            end
+            
+            drawList()
+        elseif key == keys.down or key == keys.s then
+            selectedItem = selectedItem < #items and selectedItem + 1 or 1
+            
+            -- Adjust view if selection is out of view
+            if selectedItem >= startIndex + maxDisplay then
+                startIndex = selectedItem - maxDisplay + 1
+            end
+            
+            drawList()
+        elseif key == keys.pageUp then
+            startIndex = math.max(1, startIndex - maxDisplay)
+            selectedItem = startIndex
+            drawList()
+        elseif key == keys.pageDown then
+            startIndex = math.min(#items - maxDisplay + 1, startIndex + maxDisplay)
+            if startIndex < 1 then startIndex = 1 end
+            selectedItem = startIndex
+            drawList()
+        elseif key == keys.enter then
+            running = false
+            return selectedItem, items[selectedItem]
+        elseif key == keys.escape then
+            running = false
+            return nil
+        end
+    end
+    
+    return nil
 end
 
 -- Config Module
@@ -390,26 +532,28 @@ end
 -- Ballistics Module
 AegisOS.ballistics = {}
 
-function AegisOS.ballistics.getDragCoefficient(angle)
-    angle = math.abs(angle)
-    if angle >= 25 then
-        return 0.009375
-    elseif angle >= 20 then
-        return 0.0096875
-    elseif angle >= 15 then
-        return 0.0095
+function AegisOS.ballistics.getDragCoefficient(range)
+    if range >= 500 then
+        return 0.0090
+    elseif range >= 470 then
+        return 0.0089
+    elseif range >= 420 then
+        return 0.0087
+    elseif range >= 340 then
+        return 0.0085
+    elseif range >= 230 then
+        return 0.0077
     else
-        return 0.0091
+        return 0
     end
 end
 
-function AegisOS.ballistics.simulateProjectile(startX, startY, startZ, velocity, pitch, yaw)
-    local vx = velocity * math.cos(math.rad(pitch)) * math.cos(math.rad(yaw))
+function AegisOS.ballistics.simulateProjectile(startX, startY, velocity, pitch, range)
+    local vx = velocity * math.cos(math.rad(pitch))
     local vy = velocity * math.sin(math.rad(pitch))
-    local vz = velocity * math.cos(math.rad(pitch)) * math.sin(math.rad(yaw))
     
-    local x, y, z = startX, startY, startZ
-    local dragCoeff = AegisOS.ballistics.getDragCoefficient(pitch)
+    local x, y = startX, startY
+    local dragCoeff = AegisOS.ballistics.getDragCoefficient(range)
     local dragFactor = 1 - (dragCoeff * 20)
     local gravity = AegisOS.constants.GRAVITY * (20^2)
     
@@ -417,7 +561,6 @@ function AegisOS.ballistics.simulateProjectile(startX, startY, startZ, velocity,
         -- Apply drag
         vx = vx * (dragFactor^AegisOS.constants.TIME_STEP)
         vy = vy * (dragFactor^AegisOS.constants.TIME_STEP)
-        vz = vz * (dragFactor^AegisOS.constants.TIME_STEP)
         
         -- Apply gravity
         vy = vy - gravity * AegisOS.constants.TIME_STEP
@@ -425,11 +568,10 @@ function AegisOS.ballistics.simulateProjectile(startX, startY, startZ, velocity,
         -- Update position
         x = x + vx * AegisOS.constants.TIME_STEP
         y = y + vy * AegisOS.constants.TIME_STEP
-        z = z + vz * AegisOS.constants.TIME_STEP
         
         -- Check if projectile has hit the ground
         if y <= 0 then
-            return x, y, z, i * AegisOS.constants.TIME_STEP  -- Return landing coordinates and time
+            return x, y, i * AegisOS.constants.TIME_STEP  -- Return landing coordinates and time
         end
     end
     
@@ -437,16 +579,16 @@ function AegisOS.ballistics.simulateProjectile(startX, startY, startZ, velocity,
     return nil, nil, nil, nil
 end
 
-function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targetX, targetY, targetZ, yaw)
+function AegisOS.ballistics.calculatePitchForTarget(startX, startY, targetX, targetY, yaw)
     local initialVelocity = 160.0  -- Initial projectile velocity in blocks/tick
     local bestPitch = 31  -- Default pitch if calculation fails
     local bestDistance = math.huge
-    
+    local range = math.abs(targetX-startX)
     -- Try various pitch angles to find the best one
     for pitch = 0, 60, 1 do
-        local landX, landY, landZ = AegisOS.ballistics.simulateProjectile(startX, startY, startZ, initialVelocity, pitch, yaw)
-        if landX and landY and landZ then
-            local distance = math.sqrt((landX - targetX)^2 + (landZ - targetZ)^2)
+        local landX, landY = AegisOS.ballistics.simulateProjectile(startX, startY, initialVelocity, pitch, range)
+        if landX and landY then
+            local distance = math.abs(landX - targetX)
             if distance < bestDistance then
                 bestDistance = distance
                 bestPitch = pitch
@@ -456,10 +598,10 @@ function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targ
     
     -- Fine-tune the pitch
     for pitch = bestPitch - 0.9, bestPitch + 0.9, 0.1 do
-        local landX, landY, landZ = AegisOS.ballistics.simulateProjectile(startX, startY, startZ, initialVelocity, pitch, yaw)
+        local landX, landY = AegisOS.ballistics.simulateProjectile(startX, startY, initialVelocity, pitch, range)
         
-        if landX and landY and landZ then
-            local distance = math.sqrt((landX - targetX)^2 + (landZ - targetZ)^2)
+        if landX and landY then
+            local distance = math.sqrt((landX - targetX)^2)
             
             if distance < bestDistance then
                 bestDistance = distance
@@ -468,7 +610,7 @@ function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targ
         end
     end
     
-    return bestPitch, bestDistance
+    return math.floor(bestPitch * 1000 + 0.5) / 1000, bestDistance
 end
 
 function AegisOS.ballistics.findYaw(targetPoint)
@@ -536,7 +678,7 @@ function AegisOS.missions.addMission()
         AegisOS.ui.showMessage("Failed to add fire mission.", 2)
     end
 end
-
+-- Fire Mission Module with enhanced UI
 function AegisOS.missions.listMissions()
     AegisOS.ui.drawHeader("Fire Mission List")
     
@@ -547,14 +689,24 @@ function AegisOS.missions.listMissions()
         return
     end
     
-    for index, mission in ipairs(missions) do
-        print("Mission #" .. index)
-        print("  Target: X=" .. mission.point.x .. ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z)
-        print("  Munition: " .. mission.munition)
-        print("---------------------------")
+    -- Define how to display a mission
+    local function displayMission(mission, index)
+        return "Mission #" .. index .. ": X=" .. mission.point.x .. 
+               ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z .. 
+               " (" .. mission.munition .. ")"
     end
     
-    AegisOS.ui.showMessage("")
+    -- Show the missions with the new UI
+    local selection = AegisOS.ui.selectFromList("Fire Mission List", missions, displayMission)
+    
+    if selection then
+        local mission = missions[selection]
+        AegisOS.ui.drawHeader("Mission Details")
+        print("Mission #" .. selection)
+        print("  Target: X=" .. mission.point.x .. ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z)
+        print("  Munition: " .. mission.munition)
+        AegisOS.ui.showMessage("")
+    end
 end
 
 function AegisOS.missions.editMission()
@@ -567,21 +719,23 @@ function AegisOS.missions.editMission()
         return
     end
     
-    print("Available Missions:")
-    for index, mission in ipairs(missions) do
-        print("#" .. index .. ": X=" .. mission.point.x .. ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z)
+    -- Define how to display a mission
+    local function displayMission(mission, index)
+        return "Mission #" .. index .. ": X=" .. mission.point.x .. 
+               ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z .. 
+               " (" .. mission.munition .. ")"
     end
     
-    local missionIndex = tonumber(AegisOS.ui.prompt("\nEnter mission number to edit:"))
+    -- Show the missions with the new UI
+    local selection = AegisOS.ui.selectFromList("Select Mission to Edit", missions, displayMission)
     
-    if not missionIndex or not missions[missionIndex] then
-        AegisOS.ui.showMessage("Invalid mission number.", 2)
+    if not selection then
         return
     end
     
-    local mission = missions[missionIndex]
+    local mission = missions[selection]
     AegisOS.utils.clearScreen()
-    print("Editing Mission #" .. missionIndex)
+    print("Editing Mission #" .. selection)
     print("Current Target: X=" .. mission.point.x .. ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z)
     print("Current Munition: " .. mission.munition)
     print("\nEnter new values (leave blank to keep current):")
@@ -615,28 +769,72 @@ function AegisOS.missions.deleteMission()
         return
     end
     
-    print("Available Missions:")
-    for index, mission in ipairs(missions) do
-        print("#" .. index .. ": X=" .. mission.point.x .. ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z)
+    -- Define how to display a mission
+    local function displayMission(mission, index)
+        return "Mission #" .. index .. ": X=" .. mission.point.x .. 
+               ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z .. 
+               " (" .. mission.munition .. ")"
     end
     
-    local input = AegisOS.ui.prompt("\nEnter mission number to delete (or 'all' to clear all):")
+    -- Add a special "Delete All" option at the end
+    local displayOptions = {}
+    for i, mission in ipairs(missions) do
+        table.insert(displayOptions, mission)
+    end
+    table.insert(displayOptions, {special = "delete_all"})
     
-    if input == "all" then
-        if AegisOS.missions.saveMissions({}) then
-            AegisOS.ui.showMessage("All fire missions deleted successfully!", 2)
+    -- Custom display function that handles the special case
+    local function displayOption(item, index)
+        if item.special and item.special == "delete_all" then
+            return "DELETE ALL MISSIONS"
         else
-            AegisOS.ui.showMessage("Failed to delete fire missions.", 2)
+            return displayMission(item, index)
+        end
+    end
+    
+    -- Show the missions with the new UI
+    local selection, selectedItem = AegisOS.ui.selectFromList("Select Mission to Delete", displayOptions, displayOption)
+    
+    if not selection then
+        return
+    end
+    
+    -- Handle the special "Delete All" option
+    if selectedItem.special and selectedItem.special == "delete_all" then
+        AegisOS.ui.drawHeader("Confirm Delete All")
+        print("Are you sure you want to delete ALL missions?")
+        print("This action cannot be undone.")
+        
+        local options = {"Yes, delete all missions", "No, cancel deletion"}
+        local confirm = AegisOS.ui.showMenu("Confirm Delete All", options)
+        
+        if confirm == 1 then
+            if AegisOS.missions.saveMissions({}) then
+                AegisOS.ui.showMessage("All fire missions deleted successfully!", 2)
+            else
+                AegisOS.ui.showMessage("Failed to delete fire missions.", 2)
+            end
+        else
+            AegisOS.ui.showMessage("Deletion cancelled.", 2)
         end
     else
-        local missionIndex = tonumber(input)
-        if not missionIndex or not missions[missionIndex] then
-            AegisOS.ui.showMessage("Invalid mission number.", 2)
+        -- Get the actual mission index (accounting for the "Delete All" option)
+        local actualIndex = selection
+        if selection > #missions then
             return
         end
         
-        if AegisOS.ui.prompt("Are you sure you want to delete mission #" .. missionIndex .. "? (y/n)"):lower() == "y" then
-            table.remove(missions, missionIndex)
+        AegisOS.ui.drawHeader("Confirm Delete")
+        print("Are you sure you want to delete mission #" .. actualIndex .. "?")
+        local mission = missions[actualIndex]
+        print("Target: X=" .. mission.point.x .. ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z)
+        print("Munition: " .. mission.munition)
+        
+        local options = {"Yes, delete this mission", "No, cancel deletion"}
+        local confirm = AegisOS.ui.showMenu("Confirm Delete", options)
+        
+        if confirm == 1 then
+            table.remove(missions, actualIndex)
             if AegisOS.missions.saveMissions(missions) then
                 AegisOS.ui.showMessage("Fire mission deleted successfully!", 2)
             else
@@ -659,7 +857,37 @@ function AegisOS.missions.executeMissions()
         return
     end
     
-    print("Total Missions: " .. #missions)
+    -- Define how to display a mission for selection
+    local function displayMission(mission, index)
+        return "Mission #" .. index .. ": X=" .. mission.point.x .. 
+               ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z .. 
+               " (" .. mission.munition .. ")"
+    end
+    
+    -- Add options for execution
+    local options = {
+        "Execute All Missions",
+        "Select Single Mission to Execute",
+        "Cancel Execution"
+    }
+    
+    local choice = AegisOS.ui.showMenu("Execute Fire Missions", options)
+    
+    if choice == 3 then
+        return
+    elseif choice == 2 then
+        -- Select a single mission
+        local selection = AegisOS.ui.selectFromList("Select Mission to Execute", missions, displayMission)
+        if not selection then
+            return
+        end
+        
+        local singleMission = {missions[selection]}
+        missions = singleMission
+    end
+    
+    -- Now execute the mission(s)
+    print("Total Missions to Execute: " .. #missions)
     print("Starting execution in 3 seconds...")
     sleep(3)
     
@@ -674,18 +902,16 @@ function AegisOS.missions.executeMissions()
         local yawAngle = AegisOS.ballistics.findYaw(targetPoint)
         
         -- Calculate distance to target (2D)
-        local targetX = mission.point.x
+        local targetX = mission.point.x + mission.point.z
         local targetY = mission.point.y or 0
-        local targetZ = mission.point.z
-        local startX = config.centerPoint.x + 9 * math.cos(math.rad(yawAngle))
+        local startX = config.centerPoint.x + 9 * math.sin(math.rad(yawAngle)) + config.centerPoint.z + 9 * math.cos(math.rad(yawAngle))
         local startY = math.abs(config.centerPoint.y - targetY) or 0
-        local startZ = config.centerPoint.z + 9 * math.sin(math.rad(yawAngle))
         
         -- Calculate pitch using physics simulation
         print("Calculating optimal pitch angle...")
         local pitchAngle, expectedError = AegisOS.ballistics.calculatePitchForTarget(
-            startX, startY, startZ, 
-            targetX, targetY, targetZ,
+            startX, startY,
+            targetX, targetY,
             yawAngle
         )
         
@@ -707,7 +933,14 @@ function AegisOS.missions.executeMissions()
         print("Moving cannon...")
         AegisOS.canon.moveCanon(yawData, pitchData)
         print("Fire mission completed!")
-        sleep(2)
+        
+        -- If there are more missions, pause briefly
+        if index < #missions then
+            print("\nPress Enter to continue to next mission...")
+            read()
+        else
+            sleep(2)
+        end
     end
     
     AegisOS.ui.showMessage("All fire missions executed successfully!", 2)
@@ -860,3 +1093,4 @@ end
 
 -- Start the OS
 AegisOS.run()
+AegisOS.canon.savePosition(0, 0)
