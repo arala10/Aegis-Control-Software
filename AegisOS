@@ -7,7 +7,8 @@ local AegisOS = {
     paths = {
         config = "data/config.json",
         missionTable = "data/mission_table.json",
-        canonState = "data/canon_state.json"
+        canonState = "data/canon_state.json",
+        logo = "data/logo.txt"
     },
     constants = {
         GRAVITY = 0.05,     -- Minecraft gravity in blocks/tick²
@@ -89,6 +90,111 @@ function AegisOS.utils.writeToJsonFile(data, filePath)
     file.close()
     
     return true
+end
+
+function AegisOS.utils.renderAsciiArt(filePath)
+    if not fs.exists(filePath) then
+        return false
+    end
+    
+    local file = fs.open(filePath, "r")
+    if not file then
+        return false
+    end
+    
+    local content = file.readAll()
+    file.close()
+    
+    print(content)
+    return true
+end
+
+function AegisOS.utils.renderCenteredAsciiArt(filePath)
+    if not fs.exists(filePath) then
+        return false
+    end
+    
+    local file = fs.open(filePath, "r")
+    if not file then
+        return false
+    end
+    
+    local content = file.readAll()
+    file.close()
+    
+    local termWidth, termHeight = term.getSize()
+    local lines = {}
+    
+    -- Split the content by newlines
+    for line in content:gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+    
+    -- Find the longest line to calculate centering
+    local maxWidth = 0
+    for _, line in ipairs(lines) do
+        maxWidth = math.max(maxWidth, #line)
+    end
+    
+    -- Calculate the starting Y position to center vertically
+    local startY = math.max(1, math.floor((termHeight - #lines) / 3))
+    
+    -- Clear screen and render each line centered
+    term.clear()
+    for i, line in ipairs(lines) do
+        local startX = math.floor((termWidth - #line) / 2)
+        term.setCursorPos(startX, startY + i - 1)
+        term.write(line)
+    end
+    
+    return true, startY + #lines  -- Return success and the line after the logo
+end
+
+function AegisOS.utils.renderLoadingBar(startY, width, steps, message)
+    local termWidth, _ = term.getSize()
+    local barWidth = width or 40
+    local startX = math.floor((termWidth - barWidth) / 2)
+    local steps = steps or 20
+    local message = message or "Loading AegisOS"
+    
+    -- Position and render message
+    local msgX = math.floor((termWidth - #message) / 2)
+    term.setCursorPos(msgX, startY + 1)
+    term.write(message)
+    
+    -- Draw the empty loading bar
+    term.setCursorPos(startX, startY + 3)
+    term.write("[" .. string.rep(" ", barWidth - 2) .. "]")
+    
+    -- Animate the loading bar
+    for i = 1, barWidth - 2 do
+        term.setCursorPos(startX + i, startY + 3)
+        term.write("=")
+        
+        -- Update the version text with progress percentage
+        local percentage = math.floor((i / (barWidth - 2)) * 100)
+        local versionText = "v" .. AegisOS.version .. " - " .. percentage .. "%"
+        local versionX = math.floor((termWidth - #versionText) / 2)
+        
+        term.setCursorPos(versionX, startY + 5)
+        term.write(versionText)
+        
+        -- Sleep less as the bar progresses for a more dynamic feel
+        local sleepTime = 0.1 - (0.08 * (i / (barWidth - 2)))
+        sleep(sleepTime)
+    end
+    
+    -- Complete loading message
+    local completionMessage = "System Initialization Complete"
+    local completionX = math.floor((termWidth - #completionMessage) / 2)
+    
+    term.setCursorPos(msgX, startY + 1)
+    term.write(string.rep(" ", #message))  -- Clear previous message
+    term.setCursorPos(completionX, startY + 1)
+    term.write(completionMessage)
+    
+    sleep(1)
+    return startY + 6  -- Return the line after the loading bar
 end
 
 -- UI Module
@@ -693,6 +799,38 @@ end
 -- Main Application
 function AegisOS.run()
     -- Initialize system
+    AegisOS.utils.clearScreen()
+    
+    -- Try to render the logo
+    if not fs.exists(AegisOS.paths.logo) and fs.exists("logo.txt") then
+        -- If logo doesn't exist in the data directory but exists in root, copy it
+        local logoFile = fs.open("logo.txt", "r")
+        local logoContent = logoFile.readAll()
+        logoFile.close()
+        
+        -- Make sure data directory exists
+        if not fs.exists("data") then
+            fs.makeDir("data")
+        end
+        
+        -- Save to data directory
+        local destFile = fs.open(AegisOS.paths.logo, "w")
+        destFile.write(logoContent)
+        destFile.close()
+    end
+    
+    local success, lineAfterLogo = AegisOS.utils.renderCenteredAsciiArt(AegisOS.paths.logo)
+    -- Display the logo
+    if success then
+        -- Render loading bar animation below the logo
+        AegisOS.utils.renderLoadingBar(lineAfterLogo, 30, 1, "Initializing AegisOS")
+    else
+        -- Fallback if logo can't be rendered
+        AegisOS.utils.clearScreen()
+        print("AegisOS v" .. AegisOS.version)
+        print("Initializing system...")
+        sleep(2)
+    end
     AegisOS.utils.redstoneToggle('top', true)
     
     while true do
