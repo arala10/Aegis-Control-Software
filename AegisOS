@@ -1,0 +1,724 @@
+-- AegisOS - Main System File Structure
+
+-- Core modules
+local AegisOS = {
+    version = "1.0.0",
+    modules = {},
+    paths = {
+        config = "data/config.json",
+        missionTable = "data/mission_table.json",
+        canonState = "data/canon_state.json"
+    },
+    constants = {
+        GRAVITY = 0.05,     -- Minecraft gravity in blocks/tick²
+        MAX_ITERATIONS = 1000,  -- Maximum simulation steps
+        TIME_STEP = 0.025   -- Simulation time step in ticks
+    }
+}
+
+-- Ensure data directory exists
+if not fs.exists("data") then
+    fs.makeDir("data")
+end
+
+-- Utils Module
+AegisOS.utils = {}
+
+function AegisOS.utils.clearScreen()
+    term.clear()
+    term.setCursorPos(1,1)
+end
+
+function AegisOS.utils.redstoneBlink(side, duration)
+    sleep(duration / 2)
+    redstone.setOutput(side, not redstone.getOutput(side))
+    sleep(duration / 2)
+    redstone.setOutput(side, not redstone.getOutput(side))
+end
+
+function AegisOS.utils.redstoneToggle(side, toggle)
+    if redstone.getOutput(side) == toggle then
+        return
+    end
+    redstone.setOutput(side, toggle)
+end
+
+function AegisOS.utils.readFromJsonFile(filePath)
+    if not fs.exists(filePath) then
+        return {}
+    end
+    
+    local file = fs.open(filePath, "r")
+    if not file then
+        return {}
+    end
+    
+    local content = file.readAll()
+    file.close()
+    
+    local success, data = pcall(textutils.unserializeJSON, content)
+    if not success or type(data) ~= "table" then
+        return {}
+    end
+    
+    return data
+end
+
+function AegisOS.utils.writeToJsonFile(data, filePath)
+    if not data or type(data) ~= "table" then
+        return false
+    end
+    
+    -- Ensure parent directories exist
+    local parentDir = string.match(filePath, "(.-)/[^/]+$")
+    if parentDir and not fs.exists(parentDir) then
+        fs.makeDir(parentDir)
+    end
+    
+    local success, serialized = pcall(textutils.serializeJSON, data)
+    if not success then
+        return false
+    end
+    
+    local file = fs.open(filePath, "w")
+    if not file then
+        return false
+    end
+    
+    file.write(serialized)
+    file.close()
+    
+    return true
+end
+
+-- UI Module
+AegisOS.ui = {}
+
+function AegisOS.ui.drawHeader(title)
+    local w, h = term.getSize()
+    local titleX = math.floor((w - #title) / 2)
+    
+    AegisOS.utils.clearScreen()
+    term.setCursorPos(1, 1)
+    term.write(string.rep("=", w))
+    term.setCursorPos(titleX, 1)
+    term.write(title)
+    term.setCursorPos(1, 2)
+    term.write(string.rep("=", w))
+    term.setCursorPos(1, 4)
+end
+
+function AegisOS.ui.showMenu(title, options)
+    AegisOS.ui.drawHeader(title)
+    
+    for i, option in ipairs(options) do
+        print(i .. ". " .. option)
+    end
+    
+    print("\nSelect option:")
+    local choice = tonumber(read())
+    return choice
+end
+
+function AegisOS.ui.prompt(message, defaultValue)
+    print(message)
+    local input = read()
+    
+    if input == "" and defaultValue ~= nil then
+        return defaultValue
+    end
+    
+    return input
+end
+
+function AegisOS.ui.showMessage(message, pause)
+    print(message)
+    if pause then
+        sleep(pause)
+    else
+        print("\nPress Enter to continue...")
+        read()
+    end
+end
+
+-- Config Module
+AegisOS.config = {}
+
+function AegisOS.config.getConfig()
+    local config = AegisOS.utils.readFromJsonFile(AegisOS.paths.config)
+    
+    if not config or not config.centerPoint or not config.muzzlePoint then
+        config = {
+            centerPoint = { x = 0, y = 0, z = 0 },
+            muzzlePoint = { x = 0, y = 0, z = 0 }
+        }
+        AegisOS.config.saveConfig(config)
+    end
+    
+    return config
+end
+
+function AegisOS.config.saveConfig(config)
+    return AegisOS.utils.writeToJsonFile(config, AegisOS.paths.config)
+end
+
+function AegisOS.config.modifyPoint(pointName, currentPoint)
+    AegisOS.utils.clearScreen()
+    print("Current " .. pointName .. ":")
+    print("X: " .. (currentPoint.x or 0))
+    print("Y: " .. (currentPoint.y or 0))
+    print("Z: " .. (currentPoint.z or 0))
+    print("\nEnter new values (leave blank to keep current):")
+    
+    print("Enter X coordinate:")
+    local x = read()
+    if x ~= "" then currentPoint.x = tonumber(x) end
+    
+    print("Enter Y coordinate:")
+    local y = read()
+    if y ~= "" then currentPoint.y = tonumber(y) end
+    
+    print("Enter Z coordinate:")
+    local z = read()
+    if z ~= "" then currentPoint.z = tonumber(z) end
+    
+    return currentPoint
+end
+
+-- Canon Control Module
+AegisOS.canon = {}
+
+function AegisOS.canon.getCurrentPosition()
+    local state = AegisOS.utils.readFromJsonFile(AegisOS.paths.canonState)
+    
+    if not state or not state.currentYaw or not state.currentPitch then
+        state = {
+            currentYaw = 0,
+            currentPitch = 0
+        }
+        AegisOS.canon.savePosition(state.currentYaw, state.currentPitch)
+    end
+    
+    return state.currentYaw, state.currentPitch
+end
+
+function AegisOS.canon.savePosition(yaw, pitch)
+    local state = {
+        currentYaw = yaw,
+        currentPitch = pitch
+    }
+    return AegisOS.utils.writeToJsonFile(state, AegisOS.paths.canonState)
+end
+
+function AegisOS.canon.calculateShortestPath(current, target)
+    -- Normalize angles to 0-360 range
+    current = current % 360
+    if current < 0 then current = current + 360 end
+    
+    target = target % 360
+    if target < 0 then target = target + 360 end
+    
+    -- Calculate clockwise and counterclockwise distances
+    local clockwiseDist = (target - current) % 360
+    local counterclockwiseDist = (current - target) % 360
+    
+    -- Choose the shorter path
+    if clockwiseDist <= counterclockwiseDist then
+        return clockwiseDist, 1  -- Clockwise, positive mod
+    else
+        return counterclockwiseDist, -1  -- Counterclockwise, negative mod
+    end
+end
+
+function AegisOS.canon.moveCanon(yawData, pitchData, triggerSide)
+    local modem = peripheral.wrap('bottom')
+    triggerSide = triggerSide or "back"
+    
+    -- Load current state
+    local prevYaw, prevPitch = AegisOS.canon.getCurrentPosition()
+    
+    -- Calculate optimal rotation paths
+    local yawAngle, yawMod = AegisOS.canon.calculateShortestPath(prevYaw, yawData.angle)
+    local pitchAngle, pitchMod = AegisOS.canon.calculateShortestPath(prevPitch, pitchData.angle)
+
+    local yawControlName = "Create_SequencedGearshift_" .. yawData.id
+    local pitchControlName = "Create_SequencedGearshift_" .. pitchData.id
+
+    -- Debug output
+    print("Moving from Yaw: " .. prevYaw .. " to " .. yawData.angle)
+    print("Rotation: " .. yawAngle .. " degrees " .. (yawMod > 0 and "clockwise" or "counterclockwise"))
+    print("Moving from Pitch: " .. prevPitch .. " to " .. pitchData.angle)
+    print("Rotation: " .. pitchAngle .. " degrees " .. (pitchMod > 0 and "upward" or "downward"))
+    sleep(1)
+
+    modem.callRemote(yawControlName, 'rotate', yawAngle * 8, yawMod)
+    modem.callRemote(pitchControlName, 'rotate', pitchAngle * 8, pitchMod)
+
+    while modem.callRemote(yawControlName, "isRunning") or modem.callRemote(pitchControlName, "isRunning") do
+        sleep(0.01)
+    end
+
+    AegisOS.utils.redstoneBlink(triggerSide, 5)
+
+    -- Save new state
+    AegisOS.canon.savePosition(yawData.angle, pitchData.angle)
+    print("Movement complete.")
+    sleep(1)
+end
+
+function AegisOS.canon.calibrate()
+    AegisOS.ui.drawHeader("Canon Calibration")
+    
+    local yaw = tonumber(AegisOS.ui.prompt("Enter current physical yaw angle (0-360):")) or 0
+    local pitch = tonumber(AegisOS.ui.prompt("Enter current physical pitch angle:")) or 0
+    
+    if AegisOS.canon.savePosition(yaw, pitch) then
+        AegisOS.ui.showMessage("Calibration successful!", 2)
+    else
+        AegisOS.ui.showMessage("Failed to save calibration data.", 2)
+    end
+    
+    return yaw, pitch
+end
+
+-- Ballistics Module
+AegisOS.ballistics = {}
+
+function AegisOS.ballistics.getDragCoefficient(angle)
+    angle = math.abs(angle)
+    if angle >= 25 then
+        return 0.009375
+    elseif angle >= 20 then
+        return 0.0096875
+    elseif angle >= 15 then
+        return 0.0095
+    else
+        return 0.0091
+    end
+end
+
+function AegisOS.ballistics.simulateProjectile(startX, startY, startZ, velocity, pitch, yaw)
+    local vx = velocity * math.cos(math.rad(pitch)) * math.cos(math.rad(yaw))
+    local vy = velocity * math.sin(math.rad(pitch))
+    local vz = velocity * math.cos(math.rad(pitch)) * math.sin(math.rad(yaw))
+    
+    local x, y, z = startX, startY, startZ
+    local dragCoeff = AegisOS.ballistics.getDragCoefficient(pitch)
+    local dragFactor = 1 - (dragCoeff * 20)
+    local gravity = AegisOS.constants.GRAVITY * (20^2)
+    
+    for i = 1, AegisOS.constants.MAX_ITERATIONS do
+        -- Apply drag
+        vx = vx * (dragFactor^AegisOS.constants.TIME_STEP)
+        vy = vy * (dragFactor^AegisOS.constants.TIME_STEP)
+        vz = vz * (dragFactor^AegisOS.constants.TIME_STEP)
+        
+        -- Apply gravity
+        vy = vy - gravity * AegisOS.constants.TIME_STEP
+        
+        -- Update position
+        x = x + vx * AegisOS.constants.TIME_STEP
+        y = y + vy * AegisOS.constants.TIME_STEP
+        z = z + vz * AegisOS.constants.TIME_STEP
+        
+        -- Check if projectile has hit the ground
+        if y <= 0 then
+            return x, y, z, i * AegisOS.constants.TIME_STEP  -- Return landing coordinates and time
+        end
+    end
+    
+    -- If we reach here, the projectile didn't land within MAX_ITERATIONS
+    return nil, nil, nil, nil
+end
+
+function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targetX, targetY, targetZ, yaw)
+    local initialVelocity = 160.0  -- Initial projectile velocity in blocks/tick
+    local bestPitch = 31  -- Default pitch if calculation fails
+    local bestDistance = math.huge
+    
+    -- Try various pitch angles to find the best one
+    for pitch = 0, 60, 1 do
+        local landX, landY, landZ = AegisOS.ballistics.simulateProjectile(startX, startY, startZ, initialVelocity, pitch, yaw)
+        if landX and landY and landZ then
+            local distance = math.sqrt((landX - targetX)^2 + (landZ - targetZ)^2)
+            if distance < bestDistance then
+                bestDistance = distance
+                bestPitch = pitch
+            end
+        end
+    end
+    
+    -- Fine-tune the pitch
+    for pitch = bestPitch - 0.9, bestPitch + 0.9, 0.1 do
+        local landX, landY, landZ = AegisOS.ballistics.simulateProjectile(startX, startY, startZ, initialVelocity, pitch, yaw)
+        
+        if landX and landY and landZ then
+            local distance = math.sqrt((landX - targetX)^2 + (landZ - targetZ)^2)
+            
+            if distance < bestDistance then
+                bestDistance = distance
+                bestPitch = pitch
+            end
+        end
+    end
+    
+    return bestPitch, bestDistance
+end
+
+function AegisOS.ballistics.findYaw(targetPoint)
+    local config = AegisOS.config.getConfig()
+
+    local basePoint = vector.new(config.centerPoint.x, 0, config.centerPoint.z)
+    local muzzleEndPoint = vector.new(config.muzzlePoint.x, 0, config.muzzlePoint.z)
+
+    local forwardVector = muzzleEndPoint - basePoint
+    forwardVector = forwardVector:normalize()
+    
+    local targetVector = targetPoint - basePoint
+    targetVector = targetVector:normalize()
+
+    -- Calculate the angle between vectors
+    local dotProduct = forwardVector:dot(targetVector)
+    local radian_angle = math.acos(math.min(1, math.max(-1, dotProduct)))
+    
+    -- Determine the direction (clockwise or counter-clockwise)
+    local crossProduct = forwardVector.x * targetVector.z - forwardVector.z * targetVector.x
+    
+    -- If cross product is negative, angle is clockwise (negative)
+    if crossProduct < 0 then
+        radian_angle = -radian_angle
+    end
+    
+    return math.deg(radian_angle)
+end
+
+-- Fire Mission Module
+AegisOS.missions = {}
+
+function AegisOS.missions.getMissions()
+    return AegisOS.utils.readFromJsonFile(AegisOS.paths.missionTable) or {}
+end
+
+function AegisOS.missions.saveMissions(missions)
+    return AegisOS.utils.writeToJsonFile(missions, AegisOS.paths.missionTable)
+end
+
+function AegisOS.missions.addMission()
+    AegisOS.ui.drawHeader("Add Fire Mission")
+    
+    local targetX = tonumber(AegisOS.ui.prompt("Enter Target X Coordinate:"))
+    local targetY = tonumber(AegisOS.ui.prompt("Enter Target Y Coordinate:"))
+    local targetZ = tonumber(AegisOS.ui.prompt("Enter Target Z Coordinate:"))
+    
+    local munitionType = AegisOS.ui.prompt("Enter Munition Type (solid, explosive, incendiary):", "solid")
+    
+    local mission = {
+        point = {
+            x = targetX,
+            y = targetY,
+            z = targetZ
+        },
+        munition = munitionType
+    }
+    
+    local missions = AegisOS.missions.getMissions()
+    table.insert(missions, mission)
+    
+    if AegisOS.missions.saveMissions(missions) then
+        AegisOS.ui.showMessage("Fire mission added successfully!", 2)
+    else
+        AegisOS.ui.showMessage("Failed to add fire mission.", 2)
+    end
+end
+
+function AegisOS.missions.listMissions()
+    AegisOS.ui.drawHeader("Fire Mission List")
+    
+    local missions = AegisOS.missions.getMissions()
+    
+    if #missions == 0 then
+        AegisOS.ui.showMessage("No fire missions found.", 2)
+        return
+    end
+    
+    for index, mission in ipairs(missions) do
+        print("Mission #" .. index)
+        print("  Target: X=" .. mission.point.x .. ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z)
+        print("  Munition: " .. mission.munition)
+        print("---------------------------")
+    end
+    
+    AegisOS.ui.showMessage("")
+end
+
+function AegisOS.missions.editMission()
+    AegisOS.ui.drawHeader("Edit Fire Mission")
+    
+    local missions = AegisOS.missions.getMissions()
+    
+    if #missions == 0 then
+        AegisOS.ui.showMessage("No fire missions found.", 2)
+        return
+    end
+    
+    print("Available Missions:")
+    for index, mission in ipairs(missions) do
+        print("#" .. index .. ": X=" .. mission.point.x .. ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z)
+    end
+    
+    local missionIndex = tonumber(AegisOS.ui.prompt("\nEnter mission number to edit:"))
+    
+    if not missionIndex or not missions[missionIndex] then
+        AegisOS.ui.showMessage("Invalid mission number.", 2)
+        return
+    end
+    
+    local mission = missions[missionIndex]
+    AegisOS.utils.clearScreen()
+    print("Editing Mission #" .. missionIndex)
+    print("Current Target: X=" .. mission.point.x .. ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z)
+    print("Current Munition: " .. mission.munition)
+    print("\nEnter new values (leave blank to keep current):")
+    
+    local x = AegisOS.ui.prompt("Enter X coordinate:")
+    if x ~= "" then mission.point.x = tonumber(x) end
+    
+    local y = AegisOS.ui.prompt("Enter Y coordinate:")
+    if y ~= "" then mission.point.y = tonumber(y) end
+    
+    local z = AegisOS.ui.prompt("Enter Z coordinate:")
+    if z ~= "" then mission.point.z = tonumber(z) end
+    
+    local munitionType = AegisOS.ui.prompt("Enter Munition Type (solid, explosive, incendiary):")
+    if munitionType ~= "" then mission.munition = munitionType end
+    
+    if AegisOS.missions.saveMissions(missions) then
+        AegisOS.ui.showMessage("Fire mission updated successfully!", 2)
+    else
+        AegisOS.ui.showMessage("Failed to update fire mission.", 2)
+    end
+end
+
+function AegisOS.missions.deleteMission()
+    AegisOS.ui.drawHeader("Delete Fire Mission")
+    
+    local missions = AegisOS.missions.getMissions()
+    
+    if #missions == 0 then
+        AegisOS.ui.showMessage("No fire missions found.", 2)
+        return
+    end
+    
+    print("Available Missions:")
+    for index, mission in ipairs(missions) do
+        print("#" .. index .. ": X=" .. mission.point.x .. ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z)
+    end
+    
+    local input = AegisOS.ui.prompt("\nEnter mission number to delete (or 'all' to clear all):")
+    
+    if input == "all" then
+        if AegisOS.missions.saveMissions({}) then
+            AegisOS.ui.showMessage("All fire missions deleted successfully!", 2)
+        else
+            AegisOS.ui.showMessage("Failed to delete fire missions.", 2)
+        end
+    else
+        local missionIndex = tonumber(input)
+        if not missionIndex or not missions[missionIndex] then
+            AegisOS.ui.showMessage("Invalid mission number.", 2)
+            return
+        end
+        
+        if AegisOS.ui.prompt("Are you sure you want to delete mission #" .. missionIndex .. "? (y/n)"):lower() == "y" then
+            table.remove(missions, missionIndex)
+            if AegisOS.missions.saveMissions(missions) then
+                AegisOS.ui.showMessage("Fire mission deleted successfully!", 2)
+            else
+                AegisOS.ui.showMessage("Failed to delete fire mission.", 2)
+            end
+        else
+            AegisOS.ui.showMessage("Deletion cancelled.", 2)
+        end
+    end
+end
+
+function AegisOS.missions.executeMissions()
+    AegisOS.ui.drawHeader("Execute Fire Missions")
+    
+    local missions = AegisOS.missions.getMissions()
+    local config = AegisOS.config.getConfig()
+    
+    if #missions == 0 then
+        AegisOS.ui.showMessage("No fire missions found.", 2)
+        return
+    end
+    
+    print("Total Missions: " .. #missions)
+    print("Starting execution in 3 seconds...")
+    sleep(3)
+    
+    for index, mission in ipairs(missions) do
+        AegisOS.utils.clearScreen()
+        print("Executing Mission #" .. index)
+        print("Target: X=" .. mission.point.x .. ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z)
+        print("Munition: " .. mission.munition)
+        
+        -- Calculate yaw
+        local targetPoint = vector.new(mission.point.x, 0, mission.point.z)
+        local yawAngle = AegisOS.ballistics.findYaw(targetPoint)
+        
+        -- Calculate distance to target (2D)
+        local targetX = mission.point.x
+        local targetY = mission.point.y or 0
+        local targetZ = mission.point.z
+        local startX = config.centerPoint.x + 9 * math.cos(math.rad(yawAngle))
+        local startY = math.abs(config.centerPoint.y - targetY) or 0
+        local startZ = config.centerPoint.z + 9 * math.sin(math.rad(yawAngle))
+        
+        -- Calculate pitch using physics simulation
+        print("Calculating optimal pitch angle...")
+        local pitchAngle, expectedError = AegisOS.ballistics.calculatePitchForTarget(
+            startX, startY, startZ, 
+            targetX, targetY, targetZ,
+            yawAngle
+        )
+        
+        print("Calculated Yaw: " .. string.format("%.2f", yawAngle) .. "°")
+        print("Calculated Pitch: " .. string.format("%.2f", pitchAngle) .. "°")
+        print("Expected accuracy: " .. string.format("%.2f", expectedError) .. " blocks")
+        sleep(1)
+        
+        local yawData = {
+            angle = yawAngle,
+            id = 0
+        }
+        
+        local pitchData = {
+            angle = pitchAngle,
+            id = 1
+        }
+        
+        print("Moving cannon...")
+        AegisOS.canon.moveCanon(yawData, pitchData)
+        print("Fire mission completed!")
+        sleep(2)
+    end
+    
+    AegisOS.ui.showMessage("All fire missions executed successfully!", 2)
+end
+
+-- Application Modules
+AegisOS.apps = {}
+
+function AegisOS.apps.fireMissionManager()
+    while true do
+        local choice = AegisOS.ui.showMenu("Fire Mission Manager", {
+            "Add Fire Mission",
+            "List Fire Missions",
+            "Edit Fire Mission",
+            "Delete Fire Mission",
+            "Execute Fire Missions",
+            "Return To Main Menu"
+        })
+        
+        if choice == 1 then
+            AegisOS.missions.addMission()
+        elseif choice == 2 then
+            AegisOS.missions.listMissions()
+        elseif choice == 3 then
+            AegisOS.missions.editMission()
+        elseif choice == 4 then
+            AegisOS.missions.deleteMission()
+        elseif choice == 5 then
+            AegisOS.missions.executeMissions()
+        elseif choice == 6 then
+            break
+        end
+    end
+end
+
+function AegisOS.apps.parameterSettings()
+    while true do
+        local choice = AegisOS.ui.showMenu("Modify Parameters", {
+            "Modify Center Point",
+            "Modify Muzzle Point",
+            "Calibrate Canon Position",
+            "Return to Main Menu"
+        })
+        
+        local config = AegisOS.config.getConfig()
+        
+        if choice == 1 then
+            config.centerPoint = AegisOS.config.modifyPoint("Center Point", config.centerPoint)
+            if AegisOS.config.saveConfig(config) then
+                AegisOS.ui.showMessage("Center Point updated successfully!", 2)
+            else
+                AegisOS.ui.showMessage("Failed to update Center Point.", 2)
+            end
+        elseif choice == 2 then
+            config.muzzlePoint = AegisOS.config.modifyPoint("Muzzle Point", config.muzzlePoint)
+            if AegisOS.config.saveConfig(config) then
+                AegisOS.ui.showMessage("Muzzle Point updated successfully!", 2)
+            else
+                AegisOS.ui.showMessage("Failed to update Muzzle Point.", 2)
+            end
+        elseif choice == 3 then
+            AegisOS.canon.calibrate()
+        elseif choice == 4 then
+            break
+        end
+    end
+end
+
+function AegisOS.apps.manualOverride()
+    AegisOS.ui.drawHeader("Manual Override")
+    
+    local yawAngle = tonumber(AegisOS.ui.prompt("Insert Yaw:"))
+    local pitchAngle = tonumber(AegisOS.ui.prompt("Insert Pitch:"))
+
+    local yawData = {
+        angle = yawAngle,
+        id = 0
+    }
+
+    local pitchData = {
+        angle = pitchAngle,
+        id = 1
+    }
+
+    AegisOS.canon.moveCanon(yawData, pitchData, "back")
+    AegisOS.ui.showMessage("Manual movement completed.", 2)
+end
+
+-- Main Application
+function AegisOS.run()
+    -- Initialize system
+    AegisOS.utils.redstoneToggle('top', true)
+    
+    while true do
+        local choice = AegisOS.ui.showMenu("Aegis Control System v" .. AegisOS.version, {
+            "Fire Mission",
+            "Manual Override",
+            "System Settings",
+            "Shutdown"
+        })
+        
+        if choice == 1 then
+            AegisOS.apps.fireMissionManager()
+        elseif choice == 2 then
+            AegisOS.apps.manualOverride()
+        elseif choice == 3 then
+            AegisOS.apps.parameterSettings()
+        elseif choice == 4 then
+            AegisOS.utils.clearScreen()
+            print("Shutting down...")
+            AegisOS.utils.redstoneToggle('top', false)
+            sleep(2)
+            AegisOS.utils.clearScreen()
+            return
+        end
+    end
+end
+
+-- Start the OS
+AegisOS.run()
