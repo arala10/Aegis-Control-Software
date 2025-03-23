@@ -3,7 +3,7 @@ local files = {
     "AegisOS.lua"
 }
 
-local baseURL = "https://github.com/arala10/Aegis-Control-Software/new/main"
+local baseURL = "https://raw.githubusercontent.com/arala10/Aegis-Control-Software/refs/heads/main/"
 
 for _, file in ipairs(files) do
     local url = baseURL .. file
