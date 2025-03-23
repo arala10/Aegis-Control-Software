@@ -532,85 +532,130 @@ end
 -- Ballistics Module
 AegisOS.ballistics = {}
 
-function AegisOS.ballistics.getDragCoefficient(range)
-    if range >= 500 then
-        return 0.0090
-    elseif range >= 470 then
-        return 0.0089
-    elseif range >= 420 then
-        return 0.0087
-    elseif range >= 340 then
-        return 0.0085
-    elseif range >= 230 then
-        return 0.0077
-    else
-        return 0
-    end
-end
-
-function AegisOS.ballistics.simulateProjectile(startX, startY, velocity, pitch, range)
-    local vx = velocity * math.cos(math.rad(pitch))
-    local vy = velocity * math.sin(math.rad(pitch))
+function AegisOS.ballistics.simulateProjectile(initial_position, initial_velocity, time_steps, dt, form_drag, env_density, base_gravity, gravity_multiplier)
+    -- Set default values if parameters are nil
+    time_steps = time_steps or 1000
+    dt = dt or 0.025
+    form_drag = form_drag or 0.01
+    env_density = env_density or 1.0
+    base_gravity = base_gravity or 0.05
+    gravity_multiplier = gravity_multiplier or 1.0
     
-    local x, y = startX, startY
-    local dragCoeff = AegisOS.ballistics.getDragCoefficient(range)
-    local dragFactor = 1 - (dragCoeff * 20)
-    local gravity = AegisOS.constants.GRAVITY * (20^2)
+    -- Calculate gravity for the simulation
+    local GRAVITY = (base_gravity * gravity_multiplier) * 400
     
-    for i = 1, AegisOS.constants.MAX_ITERATIONS do
-        -- Apply drag
-        vx = vx * (dragFactor^AegisOS.constants.TIME_STEP)
-        vy = vy * (dragFactor^AegisOS.constants.TIME_STEP)
-        
-        -- Apply gravity
-        vy = vy - gravity * AegisOS.constants.TIME_STEP
-        
-        -- Update position
-        x = x + vx * AegisOS.constants.TIME_STEP
-        y = y + vy * AegisOS.constants.TIME_STEP
-        
-        -- Check if projectile has hit the ground
-        if y <= 0 then
-            return x, y, i * AegisOS.constants.TIME_STEP  -- Return landing coordinates and time
-        end
-    end
+    -- Initialize position and velocity
+    local position = {initial_position[1], initial_position[2], initial_position[3] or 0}
+    local velocity = {initial_velocity[1], initial_velocity[2], initial_velocity[3] or 0}
     
-    -- If we reach here, the projectile didn't land within MAX_ITERATIONS
-    return nil, nil, nil, nil
-end
-
-function AegisOS.ballistics.calculatePitchForTarget(startX, startY, targetX, targetY, yaw)
-    local initialVelocity = 160.0  -- Initial projectile velocity in blocks/tick
-    local bestPitch = 31  -- Default pitch if calculation fails
-    local bestDistance = math.huge
-    local range = math.abs(targetX-startX)
-    -- Try various pitch angles to find the best one
-    for pitch = 0, 60, 1 do
-        local landX, landY = AegisOS.ballistics.simulateProjectile(startX, startY, initialVelocity, pitch, range)
-        if landX and landY then
-            local distance = math.abs(landX - targetX)
-            if distance < bestDistance then
-                bestDistance = distance
-                bestPitch = pitch
-            end
-        end
-    end
+    -- Table to store trajectory
+    local positions = {{position[1], position[2], position[3]}}
     
-    -- Fine-tune the pitch
-    for pitch = bestPitch - 0.9, bestPitch + 0.9, 0.1 do
-        local landX, landY = AegisOS.ballistics.simulateProjectile(startX, startY, initialVelocity, pitch, range)
+    -- Simulation loop
+    for i = 1, time_steps do
+        -- Calculate current speed
+        local speed = math.sqrt(velocity[1]^2 + velocity[2]^2 + velocity[3]^2)
         
-        if landX and landY then
-            local distance = math.sqrt((landX - targetX)^2)
+        if speed > 0 then
+            -- Compute linear drag
+            local drag = form_drag * env_density * speed
+            drag = math.min(drag, speed)  -- Limit drag force
             
-            if distance < bestDistance then
-                bestDistance = distance
-                bestPitch = pitch
-            end
+            -- Apply drag to velocity (scaled per tick)
+            local drag_factor = (drag / speed) * dt * 20
+            
+            -- Apply drag uniformly to all velocity components
+            velocity[1] = velocity[1] * (1 - drag_factor)
+            velocity[2] = velocity[2] * (1 - drag_factor)
+            velocity[3] = velocity[3] * (1 - drag_factor)
+        end
+        
+        -- Apply gravity to vertical component (Y in Lua)
+        velocity[2] = velocity[2] - GRAVITY * dt
+        
+        -- Update position using velocity
+        position[1] = position[1] + velocity[1] * dt
+        position[2] = position[2] + velocity[2] * dt
+        position[3] = position[3] + velocity[3] * dt
+        
+        -- Store new position
+        table.insert(positions, {position[1], position[2], position[3]})
+        
+        -- Stop simulation if projectile hits the ground
+        if position[2] <= 0 then
+            position[2] = 0  -- Ensure exact ground level
+            positions[#positions] = {position[1], position[2], position[3]}
+            break
         end
     end
     
-    return math.floor(bestPitch * 1000 + 0.5) / 1000, bestDistance
+    return positions
+end
+
+function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targetX, targetY, targetZ)
+    -- Default values for physics parameters
+    local form_drag = 0.01
+    local env_density = 1.0
+    local base_gravity = 0.05
+    local gravity_multiplier = 1.0
+    local initial_speed = 160.0  -- Based on the Python code
+    
+    -- Calculate horizontal distance
+    local dx = targetX - startX
+    local dz = targetZ - startZ
+    local horizontalDistance = math.sqrt(dx^2 + dz^2)
+    local verticalDistance = targetY - startY
+    
+    -- Create normalized direction vector for horizontal movement
+    local dirX, dirZ
+    if horizontalDistance > 0 then
+        dirX = dx / horizontalDistance
+        dirZ = dz / horizontalDistance
+    else
+        -- If target is directly above/below, use default direction
+        dirX, dirZ = 1, 0
+    end
+    
+    -- Test a range of angles to find the best one
+    local bestAngle = nil
+    local minDistance = math.huge
+    
+    -- Try angles from 0 to 60 degrees in 1-degree increments
+    for angle = 0, 30, 5 do
+        local angleRad = math.rad(angle)
+        local vx = initial_speed * math.cos(angleRad) * dirX
+        local vy = initial_speed * math.sin(angleRad)
+        local vz = initial_speed * math.cos(angleRad) * dirZ
+        
+        local trajectory = AegisOS.ballistics.simulateProjectile(
+            {startX, startY, startZ},
+            {vx, vy, vz},
+            1000,
+            0.025,
+            form_drag,
+            env_density,
+            base_gravity,
+            gravity_multiplier
+        )
+        
+        -- Get the final position
+        local finalPos = trajectory[#trajectory]
+        local finalDistance = math.sqrt((finalPos[1] - targetX)^2 + (finalPos[2] - targetY)^2 + (finalPos[3] - targetZ)^2)
+        
+        -- Check if this is the closest to the target so far
+        if finalDistance < minDistance then
+            minDistance = finalDistance
+            bestAngle = angle
+        end
+        
+        -- If we're close enough, break early
+        if finalDistance < 2 then
+            break
+        end
+    end
+    
+    -- Return just the best pitch angle and the expected error
+    return bestAngle, minDistance
 end
 
 function AegisOS.ballistics.findYaw(targetPoint)
@@ -902,17 +947,18 @@ function AegisOS.missions.executeMissions()
         local yawAngle = AegisOS.ballistics.findYaw(targetPoint)
         
         -- Calculate distance to target (2D)
-        local targetX = mission.point.x + mission.point.z
+        local targetX = mission.point.x
         local targetY = mission.point.y or 0
-        local startX = config.centerPoint.x + 9 * math.sin(math.rad(yawAngle)) + config.centerPoint.z + 9 * math.cos(math.rad(yawAngle))
+        local targetZ = mission.point.z
+        local startX = config.centerPoint.x + 9 * math.sin(math.rad(yawAngle))
         local startY = math.abs(config.centerPoint.y - targetY) or 0
+        local startZ = config.centerPoint.z + 9 * math.cos(math.rad(yawAngle))
         
         -- Calculate pitch using physics simulation
         print("Calculating optimal pitch angle...")
         local pitchAngle, expectedError = AegisOS.ballistics.calculatePitchForTarget(
-            startX, startY,
-            targetX, targetY,
-            yawAngle
+            startX, startY, startZ,
+            targetX, targetY,targetZ
         )
         
         print("Calculated Yaw: " .. string.format("%.2f", yawAngle) .. "°")
