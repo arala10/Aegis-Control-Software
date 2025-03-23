@@ -2,7 +2,7 @@
 
 -- Core modules
 local AegisOS = {
-    version = "1.0.0",
+    version = "1.0.5",
     modules = {},
     paths = {
         config = "data/config.json",
@@ -13,7 +13,8 @@ local AegisOS = {
     constants = {
         GRAVITY = 0.05,     -- Minecraft gravity in blocks/tick²
         MAX_ITERATIONS = 1000,  -- Maximum simulation steps
-        TIME_STEP = 0.025   -- Simulation time step in ticks
+        TIME_STEP = 0.025,   -- Simulation time step in ticks
+        DRAG = 0.01   -- Simulation time step in ticks
     }
 }
 
@@ -532,13 +533,13 @@ end
 -- Ballistics Module
 AegisOS.ballistics = {}
 
-function AegisOS.ballistics.simulateProjectile(initial_position, initial_velocity, time_steps, dt, form_drag, env_density, base_gravity, gravity_multiplier)
+function AegisOS.ballistics.simulateProjectile(initial_position, initial_velocity, env_density, gravity_multiplier)
     -- Set default values if parameters are nil
-    time_steps = time_steps or 1000
-    dt = dt or 0.025
-    form_drag = form_drag or 0.01
+    local time_steps = AegisOS.constants.MAX_ITERATIONS
+    local dt = AegisOS.constants.TIME_STEP
+    local form_drag = AegisOS.constants.DRAG
     env_density = env_density or 1.0
-    base_gravity = base_gravity or 0.05
+    local base_gravity = AegisOS.constants.GRAVITY
     gravity_multiplier = gravity_multiplier or 1.0
     
     -- Calculate gravity for the simulation
@@ -594,9 +595,7 @@ end
 
 function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targetX, targetY, targetZ)
     -- Default values for physics parameters
-    local form_drag = 0.01
     local env_density = 1.0
-    local base_gravity = 0.05
     local gravity_multiplier = 1.0
     local initial_speed = 160.0  -- Based on the Python code
     
@@ -630,28 +629,21 @@ function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targ
         local trajectory = AegisOS.ballistics.simulateProjectile(
             {startX, startY, startZ},
             {vx, vy, vz},
-            1000,
-            0.025,
-            form_drag,
             env_density,
-            base_gravity,
             gravity_multiplier
         )
         
         -- Get the final position
         local finalPos = trajectory[#trajectory]
-        local finalDistance = math.sqrt((finalPos[1] - targetX)^2 + (finalPos[2] - targetY)^2 + (finalPos[3] - targetZ)^2)
-        
+        local finalDistance = math.sqrt((finalPos[1] - targetX)^2 + (finalPos[3] - targetZ)^2)
+        print(angle, finalDistance)
+        read()
         -- Check if this is the closest to the target so far
         if finalDistance < minDistance then
             minDistance = finalDistance
             bestAngle = angle
         end
         
-        -- If we're close enough, break early
-        if finalDistance < 2 then
-            break
-        end
     end
     
     -- Return just the best pitch angle and the expected error
