@@ -2,7 +2,7 @@
 
 -- Core modules
 local AegisOS = {
-    version = "1.1.1",
+    version = "1.2.0",
     modules = {},
     paths = {
         config = "data/config.json",
@@ -401,11 +401,14 @@ function AegisOS.config.getConfig()
         centerPoint = { x = 0, y = 0, z = 0 },
         muzzlePoint = { x = 0, y = 0, z = 0 },
         physics = {
-            initialSpeed = 160.0,   -- Previously hardcoded in ballistics.calculatePitchForTarget
-            barrelLength = 9,       -- Previously hardcoded in ballistics.calculatePitchForTarget
-            environmentDensity = 1.0,  -- Previously hardcoded in ballistics
-            gravityMultiplier = 1.0    -- Previously hardcoded in ballistics
-        }
+            initialSpeed = 160.0,
+            barrelLength = 9, 
+            environmentDensity = 1.0,
+            gravityMultiplier = 1.0
+        },
+        gearShiftIDs = {yaw = 0, pitch = 1},
+        redstoneDirections = {trigger = "back", power = "top"}
+
     }
     
     -- If config doesn't exist or is missing fields, use defaults
@@ -428,6 +431,20 @@ function AegisOS.config.getConfig()
             if not config.physics.gravityMultiplier then config.physics.gravityMultiplier = defaultConfig.physics.gravityMultiplier end
         end
         
+        if not config.gearShiftIDs then
+            config.gearShiftIDs = defaultConfig.gearShiftIDs
+        else
+            if not config.gearShiftIDs.yaw then config.gearShiftIDs.yaw = defaultConfig.gearShiftIDs.yaw end
+            if not config.gearShiftIDs.pitch then config.gearShiftIDs.pitch = defaultConfig.gearShiftIDs.pitch end
+        end
+        
+        if not config.redstoneDirections then
+            config.redstoneDirections = defaultConfig.redstoneDirections
+        else
+            if not config.redstoneDirections.trigger then config.redstoneDirections.trigger = defaultConfig.redstoneDirections.trigger end
+            if not config.redstoneDirections.power then config.redstoneDirections.power = defaultConfig.redstoneDirections.power end
+        end
+
         -- Save the config with any missing fields populated
         AegisOS.config.saveConfig(config)
     end
@@ -489,6 +506,49 @@ function AegisOS.config.modifyPhysics(currentPhysics)
     if gravity ~= "" then currentPhysics.gravityMultiplier = tonumber(gravity) end
     
     return currentPhysics
+end
+
+function AegisOS.config.modifyGearshiftIDs(currentIDs)
+    AegisOS.utils.clearScreen()
+    print("Current Gearshift ID Parameters:")
+    print("Yaw Sequenced GearShift Id: " .. (currentIDs.yaw or 0))
+    print("Pitch Sequenced GearShift Id: " .. (currentIDs.pitch or 0))
+    print("\nEnter new values (leave blank to keep current):")
+    
+    print("Enter Yaw Sequenced Gearshift Id:")
+    local yawId = read()
+    if yawId ~= "" then currentIDs.yaw = tonumber(yawId) end
+    
+    print("Enter Pitch Sequenced Gearshift Id:")
+    local pitchId = read()
+    if pitchId ~= "" then currentIDs.pitch = tonumber(pitchId) end
+
+    return currentIDs
+end
+
+function AegisOS.config.modifyRedstoneDirection(currentDirections)
+    AegisOS.utils.clearScreen()
+    print("Current Redstone Directions Parameters:")
+    print("Trigger Redstone Direction: " .. (currentDirections.trigger or "back"))
+    print("Power Redstone Direction: " .. (currentDirections.power or "top"))
+    print("\nEnter new values (leave blank to keep current):")
+    local directionMatrix = {}
+    directionMatrix[1] = "top"
+    directionMatrix[2] = "right"
+    directionMatrix[3] = "bottom"
+    directionMatrix[4] = "left"
+    directionMatrix[5] = "back"
+
+    print("Enter Redstone Directions for Trigger:")
+    local triggerDir = read()
+    if triggerDir ~= "" then currentDirections.trigger = directionMatrix[tonumber(triggerDir)] end
+    
+    print("Enter Redstone Directions for Power:")
+    local powerDir = read()
+    if powerDir ~= "" then currentDirections.power = directionMatrix[tonumber(powerDir)] end
+
+    return currentDirections
+    
 end
 
 -- Canon Control Module
@@ -1050,6 +1110,8 @@ function AegisOS.missions.executeMissions()
         print("- Environment Density: " .. config.physics.environmentDensity)
         print("- Gravity Multiplier: " .. config.physics.gravityMultiplier)
         
+
+
         -- Calculate yaw
         local targetPoint = vector.new(mission.point.x, 0, mission.point.z)
         local yawAngle = AegisOS.ballistics.findYaw(targetPoint)
@@ -1074,18 +1136,23 @@ function AegisOS.missions.executeMissions()
         print("Expected accuracy: " .. string.format("%.2f", expectedError) .. " blocks")
         sleep(1)
         
+        local yawGearShiftId = config.gearShiftIDs.yaw
+        local pitchGearShiftId = config.gearShiftIDs.pitch
+
         local yawData = {
             angle = yawAngle,
-            id = 0
+            id = yawGearShiftId
         }
         
         local pitchData = {
             angle = pitchAngle,
-            id = 1
+            id = pitchGearShiftId
         }
         
+        local triggerSide = config.redstoneDirections.trigger
+
         print("Moving cannon...")
-        AegisOS.canon.moveCanon(yawData, pitchData)
+        AegisOS.canon.moveCanon(yawData, pitchData, triggerSide)
         print("Fire mission completed!")
         
         -- If there are more missions, pause briefly
@@ -1136,6 +1203,8 @@ function AegisOS.apps.parameterSettings()
             "Modify Center Point",
             "Modify Muzzle Point",
             "Modify Physics Parameters",
+            "Modify GearShift IDs",
+            "Modify Redstone Signal Directions",
             "Calibrate Canon Position",
             "Return to Main Menu"
         })
@@ -1164,8 +1233,22 @@ function AegisOS.apps.parameterSettings()
                 AegisOS.ui.showMessage("Failed to update Physics Parameters.", 2)
             end
         elseif choice == 4 then
-            AegisOS.canon.calibrate()
+            config.gearShiftIDs = AegisOS.config.modifyGearshiftIDs(config.gearShiftIDs or {})
+            if AegisOS.config.saveConfig(config) then
+                AegisOS.ui.showMessage("GearShift IDs updated successfully!", 2)
+            else
+                AegisOS.ui.showMessage("Failed to update GearShift IDs.", 2)
+            end
         elseif choice == 5 then
+            config.redstoneDirections = AegisOS.config.modifyRedstoneDirection(config.redstoneDirections or {})
+            if AegisOS.config.saveConfig(config) then
+                AegisOS.ui.showMessage("Redstone Directions updated successfully!", 2)
+            else
+                AegisOS.ui.showMessage("Failed to update Redstone Directions.", 2)
+            end
+        elseif choice == 6 then
+            AegisOS.canon.calibrate()
+        elseif choice == 7 then
             break
         end
     end
@@ -1177,17 +1260,24 @@ function AegisOS.apps.manualOverride()
     local yawAngle = tonumber(AegisOS.ui.prompt("Insert Yaw:"))
     local pitchAngle = tonumber(AegisOS.ui.prompt("Insert Pitch:"))
 
+    local config = AegisOS.config.getConfig()
+
+    local yawGearShiftId = config.gearShiftIDs.yaw
+    local pitchGearShiftId = config.gearShiftIDs.pitch
+
     local yawData = {
         angle = yawAngle,
-        id = 0
+        id = yawGearShiftId
     }
 
     local pitchData = {
         angle = pitchAngle,
-        id = 1
+        id = pitchGearShiftId
     }
 
-    AegisOS.canon.moveCanon(yawData, pitchData, "back")
+    local triggerSide = config.redstoneDirections.trigger
+
+    AegisOS.canon.moveCanon(yawData, pitchData, triggerSide)
     AegisOS.ui.showMessage("Manual movement completed.", 2)
 end
 
@@ -1226,7 +1316,10 @@ function AegisOS.run()
         print("Initializing system...")
         sleep(2)
     end
-    AegisOS.utils.redstoneToggle('top', true)
+
+    local config = AegisOS.config.getConfig()
+
+    AegisOS.utils.redstoneToggle(config.redstoneDirections.power, true)
     
     while true do
         local choice = AegisOS.ui.showMenu("Aegis Control System v" .. AegisOS.version, {
@@ -1245,7 +1338,7 @@ function AegisOS.run()
         elseif choice == 4 then
             AegisOS.utils.clearScreen()
             print("Shutting down...")
-            AegisOS.utils.redstoneToggle('top', false)
+            AegisOS.utils.redstoneToggle(config.redstoneDirections.power, false)
             sleep(2)
             AegisOS.utils.clearScreen()
             return
