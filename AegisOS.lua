@@ -2,7 +2,7 @@
 
 -- Core modules
 local AegisOS = {
-    version = "1.1.0",
+    version = "1.1.1",
     modules = {},
     paths = {
         config = "data/config.json",
@@ -396,11 +396,39 @@ AegisOS.config = {}
 function AegisOS.config.getConfig()
     local config = AegisOS.utils.readFromJsonFile(AegisOS.paths.config)
     
-    if not config or not config.centerPoint or not config.muzzlePoint then
-        config = {
-            centerPoint = { x = 0, y = 0, z = 0 },
-            muzzlePoint = { x = 0, y = 0, z = 0 }
+    -- Default configuration with all previously hardcoded values
+    local defaultConfig = {
+        centerPoint = { x = 0, y = 0, z = 0 },
+        muzzlePoint = { x = 0, y = 0, z = 0 },
+        physics = {
+            initialSpeed = 160.0,   -- Previously hardcoded in ballistics.calculatePitchForTarget
+            barrelLength = 9,       -- Previously hardcoded in ballistics.calculatePitchForTarget
+            environmentDensity = 1.0,  -- Previously hardcoded in ballistics
+            gravityMultiplier = 1.0    -- Previously hardcoded in ballistics
         }
+    }
+    
+    -- If config doesn't exist or is missing fields, use defaults
+    if not config then
+        config = defaultConfig
+        AegisOS.config.saveConfig(config)
+    else
+        -- Ensure all required fields exist by merging with defaults
+        if not config.centerPoint then config.centerPoint = defaultConfig.centerPoint end
+        if not config.muzzlePoint then config.muzzlePoint = defaultConfig.muzzlePoint end
+        
+        -- Handle physics configuration
+        if not config.physics then
+            config.physics = defaultConfig.physics
+        else
+            -- Ensure all physics fields exist
+            if not config.physics.initialSpeed then config.physics.initialSpeed = defaultConfig.physics.initialSpeed end
+            if not config.physics.barrelLength then config.physics.barrelLength = defaultConfig.physics.barrelLength end
+            if not config.physics.environmentDensity then config.physics.environmentDensity = defaultConfig.physics.environmentDensity end
+            if not config.physics.gravityMultiplier then config.physics.gravityMultiplier = defaultConfig.physics.gravityMultiplier end
+        end
+        
+        -- Save the config with any missing fields populated
         AegisOS.config.saveConfig(config)
     end
     
@@ -432,6 +460,35 @@ function AegisOS.config.modifyPoint(pointName, currentPoint)
     if z ~= "" then currentPoint.z = tonumber(z) end
     
     return currentPoint
+end
+
+-- Add new function to modify physics parameters
+function AegisOS.config.modifyPhysics(currentPhysics)
+    AegisOS.utils.clearScreen()
+    print("Current Physics Parameters:")
+    print("Initial Speed: " .. (currentPhysics.initialSpeed or 160.0))
+    print("Barrel Length: " .. (currentPhysics.barrelLength or 9))
+    print("Environment Density: " .. (currentPhysics.environmentDensity or 1.0))
+    print("Gravity Multiplier: " .. (currentPhysics.gravityMultiplier or 1.0))
+    print("\nEnter new values (leave blank to keep current):")
+    
+    print("Enter Initial Speed (default 160.0):")
+    local speed = read()
+    if speed ~= "" then currentPhysics.initialSpeed = tonumber(speed) end
+    
+    print("Enter Barrel Length (default 9):")
+    local length = read()
+    if length ~= "" then currentPhysics.barrelLength = tonumber(length) end
+    
+    print("Enter Environment Density (default 1.0):")
+    local density = read()
+    if density ~= "" then currentPhysics.environmentDensity = tonumber(density) end
+    
+    print("Enter Gravity Multiplier (default 1.0):")
+    local gravity = read()
+    if gravity ~= "" then currentPhysics.gravityMultiplier = tonumber(gravity) end
+    
+    return currentPhysics
 end
 
 -- Canon Control Module
@@ -593,11 +650,74 @@ function AegisOS.ballistics.simulateProjectile(initial_position, initial_velocit
     return positions
 end
 
+function AegisOS.ballistics.simulateProjectile(initial_position, initial_velocity, env_density, gravity_multiplier)
+    -- Set default values if parameters are nil
+    local config = AegisOS.config.getConfig()
+    local time_steps = AegisOS.constants.MAX_ITERATIONS
+    local dt = AegisOS.constants.TIME_STEP
+    local form_drag = AegisOS.constants.DRAG
+    env_density = env_density or config.physics.environmentDensity
+    local base_gravity = AegisOS.constants.GRAVITY
+    gravity_multiplier = gravity_multiplier or config.physics.gravityMultiplier
+    
+    -- Calculate gravity for the simulation
+    local GRAVITY = (base_gravity * gravity_multiplier) * 400
+    
+    -- Initialize position and velocity
+    local position = {initial_position[1], initial_position[2], initial_position[3] or 0}
+    local velocity = {initial_velocity[1], initial_velocity[2], initial_velocity[3] or 0}
+    
+    -- Table to store trajectory
+    local positions = {{position[1], position[2], position[3]}}
+    
+    -- Simulation loop
+    for i = 1, time_steps do
+        -- Calculate current speed
+        local speed = math.sqrt(velocity[1]^2 + velocity[2]^2 + velocity[3]^2)
+        
+        if speed > 0 then
+            -- Compute linear drag
+            local drag = form_drag * env_density * speed
+            drag = math.min(drag, speed)  -- Limit drag force
+            
+            -- Apply drag to velocity (scaled per tick)
+            local drag_factor = (drag / speed) * dt * 20
+            
+            -- Apply drag uniformly to all velocity components
+            velocity[1] = velocity[1] * (1 - drag_factor)
+            velocity[2] = velocity[2] * (1 - drag_factor)
+            velocity[3] = velocity[3] * (1 - drag_factor)
+        end
+        
+        -- Apply gravity to vertical component (Y in Lua)
+        velocity[2] = velocity[2] - GRAVITY * dt
+        
+        -- Update position using velocity
+        position[1] = position[1] + velocity[1] * dt
+        position[2] = position[2] + velocity[2] * dt
+        position[3] = position[3] + velocity[3] * dt
+        
+        -- Store new position
+        table.insert(positions, {position[1], position[2], position[3]})
+        
+        -- Stop simulation if projectile hits the ground
+        if position[2] <= 0 then
+            position[2] = 0  -- Ensure exact ground level
+            positions[#positions] = {position[1], position[2], position[3]}
+            break
+        end
+    end
+    
+    return positions
+end
+
 function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targetX, targetY, targetZ, yawAngle)
-    -- Default values for physics parameters
-    local env_density = 1.0
-    local gravity_multiplier = 1.0
-    local initial_speed = 160.0  -- Based on the Python code
+    -- Get physics parameters from config
+    local config = AegisOS.config.getConfig()
+    local env_density = config.physics.environmentDensity
+    local gravity_multiplier = config.physics.gravityMultiplier
+    local initial_speed = config.physics.initialSpeed
+    local barrelLength = config.physics.barrelLength
     
     -- Calculate horizontal distance
     local dx = targetX - startX
@@ -646,14 +766,12 @@ function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targ
     end
 
     -- Now that we have an initial pitch, adjust the starting position based on the barrel orientation
-    local config = AegisOS.config.getConfig()
-    local barrelLength = 9 -- Barrel length from execution mission
     
     -- Calculate the adjusted start position based on pitch and yaw
     local pitchRad = math.rad(bestAngle)
     local yawRad = math.rad(yawAngle)
     
-    -- Calculate the barrel exit position
+    -- Calculate the barrel exit position using the configurable barrel length
     local adjustedStartX = math.floor(config.centerPoint.x + barrelLength * math.sin(yawRad) * math.cos(pitchRad))
     local adjustedStartY = math.floor(math.abs(config.centerPoint.y - targetY) + barrelLength * math.sin(pitchRad))
     local adjustedStartZ = math.floor(config.centerPoint.z + barrelLength * math.cos(yawRad) * math.cos(pitchRad))
@@ -986,24 +1104,29 @@ function AegisOS.missions.executeMissions()
         print("Executing Mission #" .. index)
         print("Target: X=" .. mission.point.x .. ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z)
         print("Munition: " .. mission.munition)
+        print("Using physics parameters:")
+        print("- Initial Speed: " .. config.physics.initialSpeed)
+        print("- Barrel Length: " .. config.physics.barrelLength)
+        print("- Environment Density: " .. config.physics.environmentDensity)
+        print("- Gravity Multiplier: " .. config.physics.gravityMultiplier)
         
         -- Calculate yaw
         local targetPoint = vector.new(mission.point.x, 0, mission.point.z)
         local yawAngle = AegisOS.ballistics.findYaw(targetPoint)
         
-        -- Calculate distance to target (2D)
+        -- Calculate distance to target (2D) using the configurable barrel length
         local targetX = mission.point.x
         local targetY = mission.point.y or 0
         local targetZ = mission.point.z
-        local startX = config.centerPoint.x + 9 * math.sin(math.rad(yawAngle))
+        local startX = config.centerPoint.x + config.physics.barrelLength * math.sin(math.rad(yawAngle))
         local startY = math.abs(config.centerPoint.y - targetY) or 0
-        local startZ = config.centerPoint.z + 9 * math.cos(math.rad(yawAngle))
+        local startZ = config.centerPoint.z + config.physics.barrelLength * math.cos(math.rad(yawAngle))
         
         -- Calculate pitch using physics simulation
         print("Calculating optimal pitch angle...")
         local pitchAngle, expectedError = AegisOS.ballistics.calculatePitchForTarget(
             startX, startY, startZ,
-            targetX, targetY,targetZ, yawAngle
+            targetX, targetY, targetZ, yawAngle
         )
         
         print("Calculated Yaw: " .. string.format("%.2f", yawAngle) .. "°")
@@ -1072,6 +1195,7 @@ function AegisOS.apps.parameterSettings()
         local choice = AegisOS.ui.showMenu("Modify Parameters", {
             "Modify Center Point",
             "Modify Muzzle Point",
+            "Modify Physics Parameters",
             "Calibrate Canon Position",
             "Return to Main Menu"
         })
@@ -1093,8 +1217,15 @@ function AegisOS.apps.parameterSettings()
                 AegisOS.ui.showMessage("Failed to update Muzzle Point.", 2)
             end
         elseif choice == 3 then
-            AegisOS.canon.calibrate()
+            config.physics = AegisOS.config.modifyPhysics(config.physics or {})
+            if AegisOS.config.saveConfig(config) then
+                AegisOS.ui.showMessage("Physics Parameters updated successfully!", 2)
+            else
+                AegisOS.ui.showMessage("Failed to update Physics Parameters.", 2)
+            end
         elseif choice == 4 then
+            AegisOS.canon.calibrate()
+        elseif choice == 5 then
             break
         end
     end
