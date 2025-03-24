@@ -2,7 +2,7 @@
 
 -- Core modules
 local AegisOS = {
-    version = "1.0.5",
+    version = "1.1.0",
     modules = {},
     paths = {
         config = "data/config.json",
@@ -593,7 +593,7 @@ function AegisOS.ballistics.simulateProjectile(initial_position, initial_velocit
     return positions
 end
 
-function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targetX, targetY, targetZ)
+function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targetX, targetY, targetZ, yawAngle)
     -- Default values for physics parameters
     local env_density = 1.0
     local gravity_multiplier = 1.0
@@ -619,7 +619,8 @@ function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targ
     local bestAngle = nil
     local minDistance = math.huge
     
-    -- Try angles from 0 to 60 degrees in 1-degree increments
+    -- First pass: Calculate initial pitch angle
+    -- Try angles from 0 to 30 degrees in 5-degree increments for efficiency
     for angle = 0, 30, 5 do
         local angleRad = math.rad(angle)
         local vx = initial_speed * math.cos(angleRad) * dirX
@@ -636,17 +637,69 @@ function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targ
         -- Get the final position
         local finalPos = trajectory[#trajectory]
         local finalDistance = math.sqrt((finalPos[1] - targetX)^2 + (finalPos[3] - targetZ)^2)
-        print(angle, finalDistance)
-        read()
+        
         -- Check if this is the closest to the target so far
         if finalDistance < minDistance then
             minDistance = finalDistance
             bestAngle = angle
         end
+    end
+
+    -- Now that we have an initial pitch, adjust the starting position based on the barrel orientation
+    local config = AegisOS.config.getConfig()
+    local barrelLength = 9 -- Barrel length from execution mission
+    
+    -- Calculate the adjusted start position based on pitch and yaw
+    local pitchRad = math.rad(bestAngle)
+    local yawRad = math.rad(yawAngle)
+    
+    -- Calculate the barrel exit position
+    local adjustedStartX = math.floor(config.centerPoint.x + barrelLength * math.sin(yawRad) * math.cos(pitchRad))
+    local adjustedStartY = math.floor(math.abs(config.centerPoint.y - targetY) + barrelLength * math.sin(pitchRad))
+    local adjustedStartZ = math.floor(config.centerPoint.z + barrelLength * math.cos(yawRad) * math.cos(pitchRad))
+    
+    print("Initial pitch estimate: " .. bestAngle)
+    print("Adjusting start position for barrel orientation...")
+    print("From: X=" .. startX .. ", Y=" .. startY .. ", Z=" .. startZ)
+    print("To:   X=" .. adjustedStartX .. ", Y=" .. adjustedStartY .. ", Z=" .. adjustedStartZ)
+    
+    -- Second pass: Refine the pitch with the adjusted position
+    -- Use finer increments around our initial estimate
+    local lowerBound = math.max(0, bestAngle - 5)
+    local upperBound = math.min(30, bestAngle + 5)
+    
+    bestAngle = nil
+    minDistance = math.huge
+    
+    for angle = lowerBound, upperBound, 1 do
+        local angleRad = math.rad(angle)
+        local vx = initial_speed * math.cos(angleRad) * dirX
+        local vy = initial_speed * math.sin(angleRad)
+        local vz = initial_speed * math.cos(angleRad) * dirZ
         
+        local trajectory = AegisOS.ballistics.simulateProjectile(
+            {adjustedStartX, adjustedStartY, adjustedStartZ},
+            {vx, vy, vz},
+            env_density,
+            gravity_multiplier
+        )
+        
+        -- Get the final position
+        local finalPos = trajectory[#trajectory]
+        local finalDistance = math.sqrt((finalPos[1] - targetX)^2 + (finalPos[3] - targetZ)^2)
+
+        -- Check if this is the closest to the target so far
+        if finalDistance < minDistance then
+            minDistance = finalDistance
+            bestAngle = angle
+        end
+
+        if minDistance < 2.0 then
+            break
+        end
     end
     
-    -- Return just the best pitch angle and the expected error
+    -- Return the best pitch angle and the expected error
     return bestAngle, minDistance
 end
 
@@ -950,7 +1003,7 @@ function AegisOS.missions.executeMissions()
         print("Calculating optimal pitch angle...")
         local pitchAngle, expectedError = AegisOS.ballistics.calculatePitchForTarget(
             startX, startY, startZ,
-            targetX, targetY,targetZ
+            targetX, targetY,targetZ, yawAngle
         )
         
         print("Calculated Yaw: " .. string.format("%.2f", yawAngle) .. "°")
