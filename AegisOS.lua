@@ -1,8 +1,6 @@
--- AegisOS - Main System File Structure
 
--- Core modules
 local AegisOS = {
-    version = "1.2.0",
+    version = "1.3.0",
     modules = {},
     paths = {
         config = "data/config.json",
@@ -11,19 +9,18 @@ local AegisOS = {
         logo = "data/logo.txt"
     },
     constants = {
-        GRAVITY = 0.05,     -- Minecraft gravity in blocks/tick²
-        MAX_ITERATIONS = 1000,  -- Maximum simulation steps
-        TIME_STEP = 0.025,   -- Simulation time step in ticks
-        DRAG = 0.01   -- Simulation time step in ticks
+        GRAVITY = 0.05,     
+        MAX_ITERATIONS = 1000,  
+        DRAG = 0.0099   
     }
 }
 
--- Ensure data directory exists
+
 if not fs.exists("data") then
     fs.makeDir("data")
 end
 
--- Utils Module
+
 AegisOS.utils = {}
 
 function AegisOS.utils.clearScreen()
@@ -71,7 +68,7 @@ function AegisOS.utils.writeToJsonFile(data, filePath)
         return false
     end
     
-    -- Ensure parent directories exist
+    
     local parentDir = string.match(filePath, "(.-)/[^/]+$")
     if parentDir and not fs.exists(parentDir) then
         fs.makeDir(parentDir)
@@ -126,21 +123,21 @@ function AegisOS.utils.renderCenteredAsciiArt(filePath)
     local termWidth, termHeight = term.getSize()
     local lines = {}
     
-    -- Split the content by newlines
+    
     for line in content:gmatch("[^\r\n]+") do
         table.insert(lines, line)
     end
     
-    -- Find the longest line to calculate centering
+    
     local maxWidth = 0
     for _, line in ipairs(lines) do
         maxWidth = math.max(maxWidth, #line)
     end
     
-    -- Calculate the starting Y position to center vertically
+    
     local startY = math.max(1, math.floor((termHeight - #lines) / 3))
     
-    -- Clear screen and render each line centered
+    
     term.clear()
     for i, line in ipairs(lines) do
         local startX = math.floor((termWidth - #line) / 2)
@@ -148,7 +145,7 @@ function AegisOS.utils.renderCenteredAsciiArt(filePath)
         term.write(line)
     end
     
-    return true, startY + #lines  -- Return success and the line after the logo
+    return true, startY + #lines  
 end
 
 function AegisOS.utils.renderLoadingBar(startY, width, steps, message)
@@ -158,21 +155,21 @@ function AegisOS.utils.renderLoadingBar(startY, width, steps, message)
     local steps = steps or 20
     local message = message or "Loading AegisOS"
     
-    -- Position and render message
+    
     local msgX = math.floor((termWidth - #message) / 2)
     term.setCursorPos(msgX, startY + 1)
     term.write(message)
     
-    -- Draw the empty loading bar
+    
     term.setCursorPos(startX, startY + 3)
     term.write("[" .. string.rep(" ", barWidth - 2) .. "]")
     
-    -- Animate the loading bar
+    
     for i = 1, barWidth - 2 do
         term.setCursorPos(startX + i, startY + 3)
         term.write("=")
         
-        -- Update the version text with progress percentage
+        
         local percentage = math.floor((i / (barWidth - 2)) * 100)
         local versionText = "v" .. AegisOS.version .. " - " .. percentage .. "%"
         local versionX = math.floor((termWidth - #versionText) / 2)
@@ -180,26 +177,24 @@ function AegisOS.utils.renderLoadingBar(startY, width, steps, message)
         term.setCursorPos(versionX, startY + 5)
         term.write(versionText)
         
-        -- Sleep less as the bar progresses for a more dynamic feel
+        
         local sleepTime = 0.1 - (0.08 * (i / (barWidth - 2)))
         sleep(sleepTime)
     end
     
-    -- Complete loading message
+    
     local completionMessage = "System Initialization Complete"
     local completionX = math.floor((termWidth - #completionMessage) / 2)
     
     term.setCursorPos(msgX, startY + 1)
-    term.write(string.rep(" ", #message))  -- Clear previous message
+    term.write(string.rep(" ", #message))  
     term.setCursorPos(completionX, startY + 1)
     term.write(completionMessage)
     
     sleep(1)
-    return startY + 6  -- Return the line after the loading bar
+    return startY + 6  
 end
 
--- UI Module
-AegisOS.ui = {}-- UI Module with keyboard navigation
 AegisOS.ui = {}
 
 function AegisOS.ui.drawHeader(title)
@@ -223,9 +218,9 @@ function AegisOS.ui.showMenu(title, options)
     local running = true
     local w, h = term.getSize()
     
-    -- Function to draw the menu
+    
     local function drawMenu()
-        -- Clear the menu area (below header)
+        
         for i = 4, h do
             term.setCursorPos(1, i)
             term.write(string.rep(" ", w))
@@ -244,14 +239,14 @@ function AegisOS.ui.showMenu(title, options)
         term.write("Use Up/Down arrows or W/S keys to navigate, Enter to select")
     end
     
-    -- Initial draw
+    
     drawMenu()
     
-    -- Handle user input
+    
     while running do
         local event, key = os.pullEvent("key")
         
-        -- Handle navigation
+        
         if key == keys.up or key == keys.w then
             selectedOption = selectedOption > 1 and selectedOption - 1 or #options
             drawMenu()
@@ -287,7 +282,7 @@ function AegisOS.ui.showMessage(message, pause)
     end
 end
 
--- Enhanced UI for list selection with keyboard navigation
+
 function AegisOS.ui.selectFromList(title, items, displayFunc)
     AegisOS.ui.drawHeader(title)
     
@@ -298,11 +293,11 @@ function AegisOS.ui.selectFromList(title, items, displayFunc)
     
     local selectedItem = 1
     local startIndex = 1
-    local maxDisplay = 10  -- Maximum number of items to display at once
+    local maxDisplay = 10  
     local running = true
     local w, h = term.getSize()
     
-    -- Function to display a single item
+    
     local function displayItem(item, index, isSelected)
         local prefix = isSelected and "[ " or "  "
         local suffix = isSelected and " ]" or "  "
@@ -314,28 +309,28 @@ function AegisOS.ui.selectFromList(title, items, displayFunc)
         end
     end
     
-    -- Function to draw the list
+    
     local function drawList()
-        -- Clear the display area
+        
         for i = 4, h-2 do
             term.setCursorPos(1, i)
             term.write(string.rep(" ", w))
         end
         
-        -- Display items
+        
         local endIndex = math.min(startIndex + maxDisplay - 1, #items)
         for i = startIndex, endIndex do
             term.setCursorPos(1, 4 + (i - startIndex))
             print(displayItem(items[i], i, i == selectedItem))
         end
         
-        -- Display navigation help
+        
         term.setCursorPos(1, h-1)
         term.write(string.rep("-", w))
         term.setCursorPos(1, h)
         term.write("Use Up/Down arrows to navigate, Enter to select, Esc to cancel")
         
-        -- Display pagination info if needed
+        
         if #items > maxDisplay then
             local pageInfo = "Page " .. math.ceil(startIndex/maxDisplay) .. "/" .. math.ceil(#items/maxDisplay)
             term.setCursorPos(w - #pageInfo, h-1)
@@ -343,18 +338,18 @@ function AegisOS.ui.selectFromList(title, items, displayFunc)
         end
     end
     
-    -- Initial draw
+    
     drawList()
     
-    -- Handle user input
+    
     while running do
         local event, key = os.pullEvent("key")
         
-        -- Handle navigation
+        
         if key == keys.up or key == keys.w then
             selectedItem = selectedItem > 1 and selectedItem - 1 or #items
             
-            -- Adjust view if selection is out of view
+            
             if selectedItem < startIndex then
                 startIndex = selectedItem
             end
@@ -363,7 +358,7 @@ function AegisOS.ui.selectFromList(title, items, displayFunc)
         elseif key == keys.down or key == keys.s then
             selectedItem = selectedItem < #items and selectedItem + 1 or 1
             
-            -- Adjust view if selection is out of view
+            
             if selectedItem >= startIndex + maxDisplay then
                 startIndex = selectedItem - maxDisplay + 1
             end
@@ -390,13 +385,13 @@ function AegisOS.ui.selectFromList(title, items, displayFunc)
     return nil
 end
 
--- Config Module
+
 AegisOS.config = {}
 
 function AegisOS.config.getConfig()
     local config = AegisOS.utils.readFromJsonFile(AegisOS.paths.config)
     
-    -- Default configuration with all previously hardcoded values
+    
     local defaultConfig = {
         centerPoint = { x = 0, y = 0, z = 0 },
         muzzlePoint = { x = 0, y = 0, z = 0 },
@@ -411,20 +406,20 @@ function AegisOS.config.getConfig()
 
     }
     
-    -- If config doesn't exist or is missing fields, use defaults
+    
     if not config then
         config = defaultConfig
         AegisOS.config.saveConfig(config)
     else
-        -- Ensure all required fields exist by merging with defaults
+        
         if not config.centerPoint then config.centerPoint = defaultConfig.centerPoint end
         if not config.muzzlePoint then config.muzzlePoint = defaultConfig.muzzlePoint end
         
-        -- Handle physics configuration
+        
         if not config.physics then
             config.physics = defaultConfig.physics
         else
-            -- Ensure all physics fields exist
+            
             if not config.physics.initialSpeed then config.physics.initialSpeed = defaultConfig.physics.initialSpeed end
             if not config.physics.barrelLength then config.physics.barrelLength = defaultConfig.physics.barrelLength end
             if not config.physics.environmentDensity then config.physics.environmentDensity = defaultConfig.physics.environmentDensity end
@@ -445,7 +440,7 @@ function AegisOS.config.getConfig()
             if not config.redstoneDirections.power then config.redstoneDirections.power = defaultConfig.redstoneDirections.power end
         end
 
-        -- Save the config with any missing fields populated
+        
         AegisOS.config.saveConfig(config)
     end
     
@@ -479,7 +474,7 @@ function AegisOS.config.modifyPoint(pointName, currentPoint)
     return currentPoint
 end
 
--- Add new function to modify physics parameters
+
 function AegisOS.config.modifyPhysics(currentPhysics)
     AegisOS.utils.clearScreen()
     print("Current Physics Parameters:")
@@ -551,7 +546,7 @@ function AegisOS.config.modifyRedstoneDirection(currentDirections)
     
 end
 
--- Canon Control Module
+
 AegisOS.canon = {}
 
 function AegisOS.canon.getCurrentPosition()
@@ -577,22 +572,22 @@ function AegisOS.canon.savePosition(yaw, pitch)
 end
 
 function AegisOS.canon.calculateShortestPath(current, target)
-    -- Normalize angles to 0-360 range
+    
     current = current % 360
     if current < 0 then current = current + 360 end
     
     target = target % 360
     if target < 0 then target = target + 360 end
     
-    -- Calculate clockwise and counterclockwise distances
+    
     local clockwiseDist = (target - current) % 360
     local counterclockwiseDist = (current - target) % 360
     
-    -- Choose the shorter path
+    
     if clockwiseDist <= counterclockwiseDist then
-        return clockwiseDist, 1  -- Clockwise, positive mod
+        return clockwiseDist, 1  
     else
-        return counterclockwiseDist, -1  -- Counterclockwise, negative mod
+        return counterclockwiseDist, -1  
     end
 end
 
@@ -600,17 +595,17 @@ function AegisOS.canon.moveCanon(yawData, pitchData, triggerSide)
     local modem = peripheral.wrap('bottom')
     triggerSide = triggerSide or "back"
     
-    -- Load current state
+    
     local prevYaw, prevPitch = AegisOS.canon.getCurrentPosition()
     
-    -- Calculate optimal rotation paths
+    
     local yawAngle, yawMod = AegisOS.canon.calculateShortestPath(prevYaw, yawData.angle)
     local pitchAngle, pitchMod = AegisOS.canon.calculateShortestPath(prevPitch, pitchData.angle)
 
     local yawControlName = "Create_SequencedGearshift_" .. yawData.id
     local pitchControlName = "Create_SequencedGearshift_" .. pitchData.id
 
-    -- Debug output
+    
     print("Moving from Yaw: " .. prevYaw .. " to " .. yawData.angle)
     print("Rotation: " .. yawAngle .. " degrees " .. (yawMod > 0 and "clockwise" or "counterclockwise"))
     print("Moving from Pitch: " .. prevPitch .. " to " .. pitchData.angle)
@@ -626,7 +621,7 @@ function AegisOS.canon.moveCanon(yawData, pitchData, triggerSide)
 
     AegisOS.utils.redstoneBlink(triggerSide, 5)
 
-    -- Save new state
+    
     AegisOS.canon.savePosition(yawData.angle, pitchData.angle)
     print("Movement complete.")
     sleep(1)
@@ -647,179 +642,109 @@ function AegisOS.canon.calibrate()
     return yaw, pitch
 end
 
--- Ballistics Module
+
 AegisOS.ballistics = {}
 
 function AegisOS.ballistics.simulateProjectile(initial_position, initial_velocity, env_density, gravity_multiplier)
-    -- Set default values if parameters are nil
-    local config = AegisOS.config.getConfig()
-    local time_steps = AegisOS.constants.MAX_ITERATIONS
-    local dt = AegisOS.constants.TIME_STEP
-    local form_drag = AegisOS.constants.DRAG
-    env_density = env_density or config.physics.environmentDensity
-    local base_gravity = AegisOS.constants.GRAVITY
-    gravity_multiplier = gravity_multiplier or config.physics.gravityMultiplier
+    local trajectory = {}
+    local position = vector.new(initial_position[1], initial_position[2], initial_position[3])
+    local velocity = vector.new(initial_velocity[1], initial_velocity[2], initial_velocity[3])
+    local gravity = vector.new(0.0, -AegisOS.constants.GRAVITY * gravity_multiplier, 0.0)
     
-    -- Calculate gravity for the simulation
-    local GRAVITY = (base_gravity * gravity_multiplier) * 400
-    
-    -- Initialize position and velocity
-    local position = {initial_position[1], initial_position[2], initial_position[3] or 0}
-    local velocity = {initial_velocity[1], initial_velocity[2], initial_velocity[3] or 0}
-    
-    -- Table to store trajectory
-    local positions = {{position[1], position[2], position[3]}}
-    
-    -- Simulation loop
-    for i = 1, time_steps do
-        -- Calculate current speed
-        local speed = math.sqrt(velocity[1]^2 + velocity[2]^2 + velocity[3]^2)
-        
+    table.insert(trajectory, {position.x, position.y, position.z})
+
+    for i = 1, AegisOS.constants.MAX_ITERATIONS do
+        local drag_force = vector.new(0.0, 0.0, 0.0)
+        local speed = velocity:length()
+
         if speed > 0 then
-            -- Compute linear drag
-            local drag = form_drag * env_density * speed
-            drag = math.min(drag, speed)  -- Limit drag force
-            
-            -- Apply drag to velocity (scaled per tick)
-            local drag_factor = (drag / speed) * dt * 20
-            
-            -- Apply drag uniformly to all velocity components
-            velocity[1] = velocity[1] * (1 - drag_factor)
-            velocity[2] = velocity[2] * (1 - drag_factor)
-            velocity[3] = velocity[3] * (1 - drag_factor)
+            local drag_magnitude = AegisOS.constants.DRAG * env_density * speed
+            drag_magnitude = math.min(drag_magnitude, speed)
+            drag_force = velocity:normalize() * -drag_magnitude
         end
-        
-        -- Apply gravity to vertical component (Y in Lua)
-        velocity[2] = velocity[2] - GRAVITY * dt
-        
-        -- Update position using velocity
-        position[1] = position[1] + velocity[1] * dt
-        position[2] = position[2] + velocity[2] * dt
-        position[3] = position[3] + velocity[3] * dt
-        
-        -- Store new position
-        table.insert(positions, {position[1], position[2], position[3]})
-        
-        -- Stop simulation if projectile hits the ground
-        if position[2] <= 0 then
-            position[2] = 0  -- Ensure exact ground level
-            positions[#positions] = {position[1], position[2], position[3]}
+
+        -- Apply drag and gravity
+        local acceleration = gravity + drag_force
+        velocity = velocity + acceleration
+        position = position + velocity
+
+        table.insert(trajectory, {position.x, position.y, position.z})
+
+        if position.y <= 0 then
+            position.y = 0
+            velocity = vector.new(0, 0, 0)
+            trajectory[#trajectory] = {position.x, position.y, position.z}
             break
         end
     end
-    
-    return positions
+
+    return trajectory
 end
 
+
 function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targetX, targetY, targetZ, yawAngle)
-    -- Get physics parameters from config
     local config = AegisOS.config.getConfig()
     local env_density = config.physics.environmentDensity
     local gravity_multiplier = config.physics.gravityMultiplier
     local initial_speed = config.physics.initialSpeed
     local barrelLength = config.physics.barrelLength
-    
-    -- Calculate horizontal distance
+
     local dx = targetX - startX
     local dz = targetZ - startZ
     local horizontalDistance = math.sqrt(dx^2 + dz^2)
     local verticalDistance = targetY - startY
-    
-    -- Create normalized direction vector for horizontal movement
-    local dirX, dirZ
-    if horizontalDistance > 0 then
-        dirX = dx / horizontalDistance
-        dirZ = dz / horizontalDistance
-    else
-        -- If target is directly above/below, use default direction
-        dirX, dirZ = 1, 0
-    end
-    
-    -- Test a range of angles to find the best one
+
+    local dirX, dirZ = dx / horizontalDistance, dz / horizontalDistance
+
     local bestAngle = nil
-    local minDistance = math.huge
-    
-    -- First pass: Calculate initial pitch angle
-    -- Try angles from 0 to 30 degrees in 5-degree increments for efficiency
-    for angle = 0, 30, 5 do
+    local minError = math.huge
+
+    for angle = 0, 60, 1 do
         local angleRad = math.rad(angle)
         local vx = initial_speed * math.cos(angleRad) * dirX
         local vy = initial_speed * math.sin(angleRad)
         local vz = initial_speed * math.cos(angleRad) * dirZ
-        
+
+        -- Compute adjusted start position per angle
+        local pitchVecY = barrelLength * math.sin(angleRad)
+        local yawRad = math.rad(yawAngle)
+        local forwardVec = vector.new(math.sin(yawRad), 0, math.cos(yawRad))
+        local forwardOffset = (forwardVec * barrelLength) * math.cos(angleRad)
+        local tipOffset = forwardVec * 0.5
+
+        local simStartX = config.centerPoint.x + forwardOffset.x + tipOffset.x
+        local simStartZ = config.centerPoint.z + forwardOffset.z + tipOffset.z
+        local simStartY = startY + pitchVecY
+
         local trajectory = AegisOS.ballistics.simulateProjectile(
-            {startX, startY, startZ},
+            {simStartX, simStartY, simStartZ},
             {vx, vy, vz},
             env_density,
             gravity_multiplier
         )
-        
-        -- Get the final position
-        local finalPos = trajectory[#trajectory]
-        local finalDistance = math.sqrt((finalPos[1] - targetX)^2 + (finalPos[3] - targetZ)^2)
-        
-        -- Check if this is the closest to the target so far
-        if finalDistance < minDistance then
-            minDistance = finalDistance
-            bestAngle = angle
-        end
-    end
 
-    -- Now that we have an initial pitch, adjust the starting position based on the barrel orientation
-    
-    -- Calculate the adjusted start position based on pitch and yaw
-    local pitchRad = math.rad(bestAngle)
-    local yawRad = math.rad(yawAngle)
-    
-    -- Calculate the barrel exit position using the configurable barrel length
-    local adjustedStartX = math.floor(config.centerPoint.x + barrelLength * math.sin(yawRad) * math.cos(pitchRad))
-    local adjustedStartY = math.floor(math.abs(config.centerPoint.y - targetY) + barrelLength * math.sin(pitchRad))
-    local adjustedStartZ = math.floor(config.centerPoint.z + barrelLength * math.cos(yawRad) * math.cos(pitchRad))
-    
-    print("Initial pitch estimate: " .. bestAngle)
-    print("Adjusting start position for barrel orientation...")
-    print("From: X=" .. startX .. ", Y=" .. startY .. ", Z=" .. startZ)
-    print("To:   X=" .. adjustedStartX .. ", Y=" .. adjustedStartY .. ", Z=" .. adjustedStartZ)
-    
-    -- Second pass: Refine the pitch with the adjusted position
-    -- Use finer increments around our initial estimate
-    local lowerBound = math.max(0, bestAngle - 5)
-    local upperBound = math.min(30, bestAngle + 5)
-    
-    bestAngle = nil
-    minDistance = math.huge
-    
-    for angle = lowerBound, upperBound, 1 do
-        local angleRad = math.rad(angle)
-        local vx = initial_speed * math.cos(angleRad) * dirX
-        local vy = initial_speed * math.sin(angleRad)
-        local vz = initial_speed * math.cos(angleRad) * dirZ
-        
-        local trajectory = AegisOS.ballistics.simulateProjectile(
-            {adjustedStartX, adjustedStartY, adjustedStartZ},
-            {vx, vy, vz},
-            env_density,
-            gravity_multiplier
-        )
-        
-        -- Get the final position
-        local finalPos = trajectory[#trajectory]
-        local finalDistance = math.sqrt((finalPos[1] - targetX)^2 + (finalPos[3] - targetZ)^2)
 
-        -- Check if this is the closest to the target so far
-        if finalDistance < minDistance then
-            minDistance = finalDistance
+        local finalPos = trajectory[#trajectory]
+        local distError = math.sqrt((finalPos[1] - targetX)^2 + (finalPos[3] - targetZ)^2)
+
+        -- print(angle)
+        -- print(simStartX, simStartY, simStartZ)
+        -- print(textutils.serialise(finalPos))
+        -- read()
+
+        if distError < minError then
+            minError = distError
             bestAngle = angle
         end
 
-        if minDistance < 2.0 then
+        if minError < 1.0 then
             break
         end
     end
-    
-    -- Return the best pitch angle and the expected error
-    return bestAngle, minDistance
+
+    return bestAngle, minError
 end
+
 
 function AegisOS.ballistics.findYaw(targetPoint)
     local config = AegisOS.config.getConfig()
@@ -833,14 +758,14 @@ function AegisOS.ballistics.findYaw(targetPoint)
     local targetVector = targetPoint - basePoint
     targetVector = targetVector:normalize()
 
-    -- Calculate the angle between vectors
+    
     local dotProduct = forwardVector:dot(targetVector)
     local radian_angle = math.acos(math.min(1, math.max(-1, dotProduct)))
     
-    -- Determine the direction (clockwise or counter-clockwise)
+    
     local crossProduct = forwardVector.x * targetVector.z - forwardVector.z * targetVector.x
     
-    -- If cross product is negative, angle is clockwise (negative)
+    
     if crossProduct < 0 then
         radian_angle = -radian_angle
     end
@@ -848,7 +773,7 @@ function AegisOS.ballistics.findYaw(targetPoint)
     return math.deg(radian_angle)
 end
 
--- Fire Mission Module
+
 AegisOS.missions = {}
 
 function AegisOS.missions.getMissions()
@@ -886,7 +811,7 @@ function AegisOS.missions.addMission()
         AegisOS.ui.showMessage("Failed to add fire mission.", 2)
     end
 end
--- Fire Mission Module with enhanced UI
+
 function AegisOS.missions.listMissions()
     AegisOS.ui.drawHeader("Fire Mission List")
     
@@ -897,14 +822,14 @@ function AegisOS.missions.listMissions()
         return
     end
     
-    -- Define how to display a mission
+    
     local function displayMission(mission, index)
         return "Mission #" .. index .. ": X=" .. mission.point.x .. 
                ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z .. 
                " (" .. mission.munition .. ")"
     end
     
-    -- Show the missions with the new UI
+    
     local selection = AegisOS.ui.selectFromList("Fire Mission List", missions, displayMission)
     
     if selection then
@@ -927,14 +852,14 @@ function AegisOS.missions.editMission()
         return
     end
     
-    -- Define how to display a mission
+    
     local function displayMission(mission, index)
         return "Mission #" .. index .. ": X=" .. mission.point.x .. 
                ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z .. 
                " (" .. mission.munition .. ")"
     end
     
-    -- Show the missions with the new UI
+    
     local selection = AegisOS.ui.selectFromList("Select Mission to Edit", missions, displayMission)
     
     if not selection then
@@ -977,21 +902,21 @@ function AegisOS.missions.deleteMission()
         return
     end
     
-    -- Define how to display a mission
+    
     local function displayMission(mission, index)
         return "Mission #" .. index .. ": X=" .. mission.point.x .. 
                ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z .. 
                " (" .. mission.munition .. ")"
     end
     
-    -- Add a special "Delete All" option at the end
+    
     local displayOptions = {}
     for i, mission in ipairs(missions) do
         table.insert(displayOptions, mission)
     end
     table.insert(displayOptions, {special = "delete_all"})
     
-    -- Custom display function that handles the special case
+    
     local function displayOption(item, index)
         if item.special and item.special == "delete_all" then
             return "DELETE ALL MISSIONS"
@@ -1000,14 +925,14 @@ function AegisOS.missions.deleteMission()
         end
     end
     
-    -- Show the missions with the new UI
+    
     local selection, selectedItem = AegisOS.ui.selectFromList("Select Mission to Delete", displayOptions, displayOption)
     
     if not selection then
         return
     end
     
-    -- Handle the special "Delete All" option
+    
     if selectedItem.special and selectedItem.special == "delete_all" then
         AegisOS.ui.drawHeader("Confirm Delete All")
         print("Are you sure you want to delete ALL missions?")
@@ -1026,7 +951,7 @@ function AegisOS.missions.deleteMission()
             AegisOS.ui.showMessage("Deletion cancelled.", 2)
         end
     else
-        -- Get the actual mission index (accounting for the "Delete All" option)
+        
         local actualIndex = selection
         if selection > #missions then
             return
@@ -1065,14 +990,14 @@ function AegisOS.missions.executeMissions()
         return
     end
     
-    -- Define how to display a mission for selection
+    
     local function displayMission(mission, index)
         return "Mission #" .. index .. ": X=" .. mission.point.x .. 
                ", Y=" .. mission.point.y .. ", Z=" .. mission.point.z .. 
                " (" .. mission.munition .. ")"
     end
     
-    -- Add options for execution
+    
     local options = {
         "Execute All Missions",
         "Select Single Mission to Execute",
@@ -1084,7 +1009,7 @@ function AegisOS.missions.executeMissions()
     if choice == 3 then
         return
     elseif choice == 2 then
-        -- Select a single mission
+        
         local selection = AegisOS.ui.selectFromList("Select Mission to Execute", missions, displayMission)
         if not selection then
             return
@@ -1094,7 +1019,7 @@ function AegisOS.missions.executeMissions()
         missions = singleMission
     end
     
-    -- Now execute the mission(s)
+    
     print("Total Missions to Execute: " .. #missions)
     print("Starting execution in 3 seconds...")
     sleep(3)
@@ -1112,19 +1037,19 @@ function AegisOS.missions.executeMissions()
         
 
 
-        -- Calculate yaw
+        
         local targetPoint = vector.new(mission.point.x, 0, mission.point.z)
         local yawAngle = AegisOS.ballistics.findYaw(targetPoint)
         
-        -- Calculate distance to target (2D) using the configurable barrel length
+        
         local targetX = mission.point.x
         local targetY = mission.point.y or 0
         local targetZ = mission.point.z
         local startX = config.centerPoint.x + config.physics.barrelLength * math.sin(math.rad(yawAngle))
-        local startY = math.abs(config.centerPoint.y - targetY) or 0
+        local startY = math.abs(config.centerPoint.y - targetY) - 0.5 or 0 - 0.5
         local startZ = config.centerPoint.z + config.physics.barrelLength * math.cos(math.rad(yawAngle))
         
-        -- Calculate pitch using physics simulation
+        
         print("Calculating optimal pitch angle...")
         local pitchAngle, expectedError = AegisOS.ballistics.calculatePitchForTarget(
             startX, startY, startZ,
@@ -1155,7 +1080,7 @@ function AegisOS.missions.executeMissions()
         AegisOS.canon.moveCanon(yawData, pitchData, triggerSide)
         print("Fire mission completed!")
         
-        -- If there are more missions, pause briefly
+        
         if index < #missions then
             print("\nPress Enter to continue to next mission...")
             read()
@@ -1167,7 +1092,7 @@ function AegisOS.missions.executeMissions()
     AegisOS.ui.showMessage("All fire missions executed successfully!", 2)
 end
 
--- Application Modules
+
 AegisOS.apps = {}
 
 function AegisOS.apps.fireMissionManager()
@@ -1281,36 +1206,36 @@ function AegisOS.apps.manualOverride()
     AegisOS.ui.showMessage("Manual movement completed.", 2)
 end
 
--- Main Application
+
 function AegisOS.run()
-    -- Initialize system
+    
     AegisOS.utils.clearScreen()
     
-    -- Try to render the logo
+    
     if not fs.exists(AegisOS.paths.logo) and fs.exists("logo.txt") then
-        -- If logo doesn't exist in the data directory but exists in root, copy it
+        
         local logoFile = fs.open("logo.txt", "r")
         local logoContent = logoFile.readAll()
         logoFile.close()
         
-        -- Make sure data directory exists
+        
         if not fs.exists("data") then
             fs.makeDir("data")
         end
         
-        -- Save to data directory
+        
         local destFile = fs.open(AegisOS.paths.logo, "w")
         destFile.write(logoContent)
         destFile.close()
     end
     
     local success, lineAfterLogo = AegisOS.utils.renderCenteredAsciiArt(AegisOS.paths.logo)
-    -- Display the logo
+    
     if success then
-        -- Render loading bar animation below the logo
+        
         AegisOS.utils.renderLoadingBar(lineAfterLogo, 30, 1, "Initializing AegisOS")
     else
-        -- Fallback if logo can't be rendered
+        
         AegisOS.utils.clearScreen()
         print("AegisOS v" .. AegisOS.version)
         print("Initializing system...")
@@ -1346,6 +1271,6 @@ function AegisOS.run()
     end
 end
 
--- Start the OS
+
 AegisOS.run()
 AegisOS.canon.savePosition(0, 0)
