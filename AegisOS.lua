@@ -1,6 +1,5 @@
-
 local AegisOS = {
-    version = "1.3.0",
+    version = "1.4.0",
     modules = {},
     paths = {
         config = "data/config.json",
@@ -11,7 +10,7 @@ local AegisOS = {
     constants = {
         GRAVITY = 0.05,     
         MAX_ITERATIONS = 1000,  
-        DRAG = 0.0099   
+        DRAG = 0.01   
     }
 }
 
@@ -19,7 +18,6 @@ local AegisOS = {
 if not fs.exists("data") then
     fs.makeDir("data")
 end
-
 
 AegisOS.utils = {}
 
@@ -645,42 +643,56 @@ end
 
 AegisOS.ballistics = {}
 
-function AegisOS.ballistics.simulateProjectile(initial_position, initial_velocity, env_density, gravity_multiplier)
-    local trajectory = {}
-    local position = vector.new(initial_position[1], initial_position[2], initial_position[3])
-    local velocity = vector.new(initial_velocity[1], initial_velocity[2], initial_velocity[3])
-    local gravity = vector.new(0.0, -AegisOS.constants.GRAVITY * gravity_multiplier, 0.0)
-    
-    table.insert(trajectory, {position.x, position.y, position.z})
-
-    for i = 1, AegisOS.constants.MAX_ITERATIONS do
-        local drag_force = vector.new(0.0, 0.0, 0.0)
-        local speed = velocity:length()
-
-        if speed > 0 then
-            local drag_magnitude = AegisOS.constants.DRAG * env_density * speed
-            drag_magnitude = math.min(drag_magnitude, speed)
-            drag_force = velocity:normalize() * -drag_magnitude
-        end
-
-        -- Apply drag and gravity
-        local acceleration = gravity + drag_force
-        velocity = velocity + acceleration
-        position = position + velocity
-
-        table.insert(trajectory, {position.x, position.y, position.z})
-
-        if position.y <= 0 then
-            position.y = 0
-            velocity = vector.new(0, 0, 0)
-            trajectory[#trajectory] = {position.x, position.y, position.z}
+function AegisOS.ballistics.simulateProjectile(start_pos, initial_velocity, env_density, gravity_multiplier, targetY, verbose)
+    local pos = vector.new(start_pos[1], start_pos[2], start_pos[3])
+    local vel = vector.new(initial_velocity[1], initial_velocity[2], initial_velocity[3])
+    local gravity = vector.new(0, -gravity_multiplier * AegisOS.constants.GRAVITY, 0)
+  
+    local trajectory = {vector.new(pos.x, pos.y, pos.z), vector.new(vel.x, vel.y, vel.z)}
+  
+    if verbose == nil then verbose = false end
+  
+    for tick = 1, AegisOS.constants.MAX_ITERATIONS do
+        local vel_sq = vel.x^2 + vel.y^2 + vel.z^2
+        if vel_sq < 1e-6 then
+            if verbose then print(string.format("Stopped at tick %d: velocity below threshold", tick)) end
             break
         end
-    end
 
+        local normalized_vel = vel:normalize()
+        local drag_force = normalized_vel:mul(-env_density * AegisOS.constants.DRAG * vel:length())
+        local accel = drag_force + gravity
+
+        local next_pos = pos + vel + accel:mul(0.5)
+        local next_vel = vel + accel
+
+        if next_pos.y < targetY then
+            local dy = next_pos - pos
+            local impact_pos = pos
+            if dy.y ~= 0 then
+                local alpha = (targetY - pos.y) / dy.y
+                impact_pos = pos + dy:mul(alpha)
+                if verbose then print(string.format("Hit 'ground' (targetY) at tick %d @ %.3f, %.3f, %.3f", tick + 1, impact_pos.x, impact_pos.y, impact_pos.z)) end
+            else
+                impact_pos = next_pos
+                if verbose then print(string.format("Hit 'ground' (targetY) at tick %d @ %.3f, %.3f, %.3f", tick + 1, next_pos.x, next_pos.y, next_pos.z)) end
+            end
+            table.insert(trajectory, vector.new(impact_pos.x, impact_pos.y, impact_pos.z))
+            break
+        end
+
+        pos = next_pos
+        vel = next_vel
+        table.insert(trajectory, vector.new(pos.x, pos.y, pos.z))
+        table.insert(trajectory, vector.new(vel.x, vel.y, vel.z))
+    end
+  
+    if verbose then
+      print(string.format("Final Position: %.3f, %.3f, %.3f", pos.x, pos.y, pos.z))
+    end
+  
     return trajectory
 end
-
 
 function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targetX, targetY, targetZ, yawAngle)
     local config = AegisOS.config.getConfig()
@@ -692,57 +704,71 @@ function AegisOS.ballistics.calculatePitchForTarget(startX, startY, startZ, targ
     local dx = targetX - startX
     local dz = targetZ - startZ
     local horizontalDistance = math.sqrt(dx^2 + dz^2)
-    local verticalDistance = targetY - startY
-
     local dirX, dirZ = dx / horizontalDistance, dz / horizontalDistance
-
+    
+    local yawRad = math.rad(yawAngle)
+    local forwardVec = vector.new(math.sin(yawRad), 0, math.cos(yawRad))
+    local tipOffset = forwardVec * 0.5
+    local centerX = config.centerPoint.x
+    local centerZ = config.centerPoint.z
+    
     local bestAngle = nil
     local minError = math.huge
-
-    for angle = 0, 60, 1 do
-        local angleRad = math.rad(angle)
-        local vx = initial_speed * math.cos(angleRad) * dirX
-        local vy = initial_speed * math.sin(angleRad)
-        local vz = initial_speed * math.cos(angleRad) * dirZ
-
-        -- Compute adjusted start position per angle
-        local pitchVecY = barrelLength * math.sin(angleRad)
-        local yawRad = math.rad(yawAngle)
-        local forwardVec = vector.new(math.sin(yawRad), 0, math.cos(yawRad))
-        local forwardOffset = (forwardVec * barrelLength) * math.cos(angleRad)
-        local tipOffset = forwardVec * 0.5
-
-        local simStartX = config.centerPoint.x + forwardOffset.x + tipOffset.x
-        local simStartZ = config.centerPoint.z + forwardOffset.z + tipOffset.z
-        local simStartY = startY + pitchVecY
-
-        local trajectory = AegisOS.ballistics.simulateProjectile(
-            {simStartX, simStartY, simStartZ},
-            {vx, vy, vz},
-            env_density,
-            gravity_multiplier
-        )
-
-
-        local finalPos = trajectory[#trajectory]
-        local distError = math.sqrt((finalPos[1] - targetX)^2 + (finalPos[3] - targetZ)^2)
-
-        -- print(angle)
-        -- print(simStartX, simStartY, simStartZ)
-        -- print(textutils.serialise(finalPos))
-        -- read()
-
-        if distError < minError then
-            minError = distError
-            bestAngle = angle
-        end
-
-        if minError < 1.0 then
+    
+    local steps = {
+        {min = -30, max = 60, step = 5},
+        {min = 0, max = 0, step = 0.45}
+    }
+    
+    for pass = 1, 2 do
+        local searchParams = steps[pass]
+        
+        if pass == 2 and bestAngle then
+            searchParams.min = math.max(0, bestAngle - 5)
+            searchParams.max = math.min(60, bestAngle + 5)
+        elseif pass == 2 and not bestAngle then
             break
         end
-    end
+        
+        for angle = searchParams.min, searchParams.max, searchParams.step do
+            local angleRad = math.rad(angle)
+            
+            local cosAngle = math.cos(angleRad)
+            local sinAngle = math.sin(angleRad)
+            local vx = initial_speed * cosAngle * dirX
+            local vy = initial_speed * sinAngle
+            local vz = initial_speed * cosAngle * dirZ
+            
+            local pitchVecY = barrelLength * sinAngle
+            local forwardOffset = forwardVec * (barrelLength * cosAngle)
+            
+            local simStartX = centerX + forwardOffset.x + tipOffset.x
+            local simStartZ = centerZ + forwardOffset.z + tipOffset.z
+            local simStartY = startY + pitchVecY
 
-    return bestAngle, minError
+            local trajectory = AegisOS.ballistics.simulateProjectile(
+                {simStartX, simStartY, simStartZ},
+                {vx, vy, vz},
+                env_density,
+                gravity_multiplier,
+                targetY
+            )
+
+            if #trajectory > 0 then
+                local finalPos = trajectory[#trajectory]
+                if finalPos and finalPos.x and finalPos.z then
+                    local distError = math.sqrt((finalPos.x - targetX)^2 + (finalPos.y - targetY)^2 + (finalPos.z - targetZ)^2)
+                    
+                    if distError < minError then
+                        minError = distError
+                        bestAngle = angle
+                    end
+                end
+            end
+        end
+    end
+    
+    return bestAngle or 15, minError
 end
 
 
@@ -1046,7 +1072,7 @@ function AegisOS.missions.executeMissions()
         local targetY = mission.point.y or 0
         local targetZ = mission.point.z
         local startX = config.centerPoint.x + config.physics.barrelLength * math.sin(math.rad(yawAngle))
-        local startY = math.abs(config.centerPoint.y - targetY) - 0.5 or 0 - 0.5
+        local startY = config.centerPoint.y - 0.5
         local startZ = config.centerPoint.z + config.physics.barrelLength * math.cos(math.rad(yawAngle))
         
         
