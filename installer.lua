@@ -1,6 +1,14 @@
 local files = {
     "logo.txt",
-    "AegisOS.lua"
+    "startup.lua",
+    "main.lua",
+    "apps.lua",
+    "modules/balistics.lua",
+    "modules/canon.lua",
+    "modules/config.lua",
+    "modules/missions.lua",
+    "modules/ui.lua",
+    "modules/utils.lua",
 }
 
 local baseURL = "https://raw.githubusercontent.com/arala10/Aegis-Control-Software/refs/heads/main/"
