@@ -1,18 +1,17 @@
---[[
-AegisOS Startup File
-Run this file to start the application.
---]]
+local scriptPath = debug.getinfo(1, "S").source:sub(2)
+local scriptDir = scriptPath:match("(.*/)")
+print(scriptDir)
 
--- Initialize the main AegisOS table
+
 AegisOS = {
     version = "1.4.0",
     modules = {},
     apps = {},
     paths = {
-        config = "data/config.json",
-        missionTable = "data/mission_table.json",
-        canonState = "data/canon_state.json",
-        logo = "data/logo.txt"
+        config = scriptDir.."data/config.json",
+        missionTable = scriptDir.."data/mission_table.json",
+        canonState = scriptDir.."data/canon_state.json",
+        logo = scriptDir.."data/logo.txt"
     },
     constants = {
         GRAVITY = 0.05,
@@ -21,24 +20,19 @@ AegisOS = {
     }
 }
 
--- Create data directory if it doesn't exist
 if not fs.exists("data") then
     fs.makeDir("data")
 end
 
--- Load all modules
--- The '...' argument passes the AegisOS table to the loaded files.
-AegisOS.utils = dofile("modules/utils.lua")
-AegisOS.ui = dofile("modules/ui.lua")
-AegisOS.config = dofile("modules/config.lua")
-AegisOS.canon = dofile("modules/canon.lua")
-AegisOS.ballistics = dofile("modules/ballistics.lua")
-AegisOS.missions = dofile("modules/missions.lua")
-AegisOS.apps = dofile("apps.lua")
-dofile("main.lua") -- This file contains the AegisOS.run() function
+AegisOS.utils = dofile(scriptDir.."modules/utils.lua")
+AegisOS.ui = dofile(scriptDir.."modules/ui.lua")
+AegisOS.config = dofile(scriptDir.."modules/config.lua")
+AegisOS.canon = dofile(scriptDir.."modules/canon.lua")
+AegisOS.ballistics = dofile(scriptDir.."modules/ballistics.lua")
+AegisOS.missions = dofile(scriptDir.."modules/missions.lua")
+AegisOS.apps = dofile(scriptDir.."apps.lua")
+dofile(scriptDir.."main.lua")
 
--- Start the OS
 AegisOS.run()
 
--- Reset canon state on shutdown
 AegisOS.canon.savePosition(0, 0)
