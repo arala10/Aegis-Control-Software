@@ -1,9 +1,8 @@
 local scriptPath = debug.getinfo(1, "S").source:sub(2)
-local scriptDir = scriptPath:match("(.*/)")
-print(scriptDir)
+local scriptDir = scriptPath:match("(.*/)") or ""
 
-
-AegisOS = {
+-- Initialize the main application object as a local variable.
+local AegisOS = {
     version = "1.4.0",
     modules = {},
     apps = {},
@@ -11,7 +10,7 @@ AegisOS = {
         config = scriptDir.."data/config.json",
         missionTable = scriptDir.."data/mission_table.json",
         canonState = scriptDir.."data/canon_state.json",
-        logo = scriptDir.."data/logo.txt"
+        logo = scriptDir.."logo.txt"
     },
     constants = {
         GRAVITY = 0.05,
@@ -20,10 +19,12 @@ AegisOS = {
     }
 }
 
-if not fs.exists("data") then
-    fs.makeDir("data")
+if not fs.exists(scriptDir.."data") then
+    fs.makeDir(scriptDir.."data")
 end
 
+-- Load all modules and attach them to the AegisOS object.
+-- These dofile calls return tables of functions.
 AegisOS.utils = dofile(scriptDir.."modules/utils.lua")
 AegisOS.ui = dofile(scriptDir.."modules/ui.lua")
 AegisOS.config = dofile(scriptDir.."modules/config.lua")
@@ -31,8 +32,9 @@ AegisOS.canon = dofile(scriptDir.."modules/canon.lua")
 AegisOS.ballistics = dofile(scriptDir.."modules/ballistics.lua")
 AegisOS.missions = dofile(scriptDir.."modules/missions.lua")
 AegisOS.apps = dofile(scriptDir.."apps.lua")
-dofile(scriptDir.."main.lua")
 
-AegisOS.run()
+-- Load the main application function from main.lua
+local run = dofile(scriptDir.."main.lua")
 
-AegisOS.canon.savePosition(0, 0)
+-- Start the application by calling the run function with the AegisOS object.
+run(AegisOS)

@@ -1,9 +1,9 @@
 local ui = {}
 
-function ui.drawHeader(title)
+function ui.drawHeader(AegisOS, title)
     local w, h = term.getSize()
     local titleX = math.floor((w - #title) / 2)
-    AegisOS.utils.clearScreen()
+    AegisOS.utils.clearScreen(AegisOS)
     term.setCursorPos(1, 1)
     term.write(string.rep("=", w))
     term.setCursorPos(titleX, 1)
@@ -13,8 +13,8 @@ function ui.drawHeader(title)
     term.setCursorPos(1, 4)
 end
 
-function ui.showMenu(title, options)
-    AegisOS.ui.drawHeader(title)
+function ui.showMenu(AegisOS, title, options)
+    AegisOS.ui.drawHeader(AegisOS, title)
     local selectedOption = 1
     local running = true
     local w, h = term.getSize()
@@ -43,14 +43,14 @@ function ui.showMenu(title, options)
     return selectedOption
 end
 
-function ui.prompt(message, defaultValue)
+function ui.prompt(AegisOS, message, defaultValue)
     print(message)
     local input = read()
     if input == "" and defaultValue ~= nil then return defaultValue end
     return input
 end
 
-function ui.showMessage(message, pause)
+function ui.showMessage(AegisOS, message, pause)
     print(message)
     if pause then
         sleep(pause)
@@ -60,9 +60,9 @@ function ui.showMessage(message, pause)
     end
 end
 
-function ui.selectFromList(title, items, displayFunc)
-    AegisOS.ui.drawHeader(title)
-    if #items == 0 then AegisOS.ui.showMessage("No items found.", 2); return nil end
+function ui.selectFromList(AegisOS, title, items, displayFunc)
+    AegisOS.ui.drawHeader(AegisOS, title)
+    if #items == 0 then AegisOS.ui.showMessage(AegisOS, "No items found.", 2); return nil end
     local selectedItem, startIndex, maxDisplay, running = 1, 1, 10, true
     local w, h = term.getSize()
     local function displayItem(item, index, isSelected)

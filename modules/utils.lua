@@ -1,23 +1,23 @@
 local utils = {}
 
-function utils.clearScreen()
+function utils.clearScreen(AegisOS)
     term.clear()
     term.setCursorPos(1, 1)
 end
 
-function utils.redstoneBlink(side, duration)
+function utils.redstoneBlink(AegisOS, side, duration)
     sleep(duration / 2)
     redstone.setOutput(side, not redstone.getOutput(side))
     sleep(duration / 2)
     redstone.setOutput(side, not redstone.getOutput(side))
 end
 
-function utils.redstoneToggle(side, toggle)
+function utils.redstoneToggle(AegisOS, side, toggle)
     if redstone.getOutput(side) == toggle then return end
     redstone.setOutput(side, toggle)
 end
 
-function utils.readFromJsonFile(filePath)
+function utils.readFromJsonFile(AegisOS, filePath)
     if not fs.exists(filePath) then return {} end
     local file = fs.open(filePath, "r")
     if not file then return {} end
@@ -28,7 +28,7 @@ function utils.readFromJsonFile(filePath)
     return data
 end
 
-function utils.writeToJsonFile(data, filePath)
+function utils.writeToJsonFile(AegisOS, data, filePath)
     if not data or type(data) ~= "table" then return false end
     local parentDir = string.match(filePath, "(.-)/[^/]+$")
     if parentDir and not fs.exists(parentDir) then fs.makeDir(parentDir) end
@@ -41,7 +41,7 @@ function utils.writeToJsonFile(data, filePath)
     return true
 end
 
-function utils.renderAsciiArt(filePath)
+function utils.renderAsciiArt(AegisOS, filePath)
     if not fs.exists(filePath) then return false end
     local file = fs.open(filePath, "r")
     if not file then return false end
@@ -51,7 +51,7 @@ function utils.renderAsciiArt(filePath)
     return true
 end
 
-function utils.renderCenteredAsciiArt(filePath)
+function utils.renderCenteredAsciiArt(AegisOS, filePath)
     if not fs.exists(filePath) then return false end
     local file = fs.open(filePath, "r")
     if not file then return false end
@@ -65,20 +65,20 @@ function utils.renderCenteredAsciiArt(filePath)
     local startY = math.max(1, math.floor((termHeight - #lines) / 3))
     term.clear()
     for i, line in ipairs(lines) do
-        local startX = math.floor((termWidth - #line) / 2)
+        local startX = math.floor((termWidth - #line) / 2) + 1
         term.setCursorPos(startX, startY + i - 1)
         term.write(line)
     end
     return true, startY + #lines
 end
 
-function utils.renderLoadingBar(startY, width, steps, message)
+function utils.renderLoadingBar(AegisOS, startY, width, steps, message)
     local termWidth, _ = term.getSize()
     local barWidth = width or 40
-    local startX = math.floor((termWidth - barWidth) / 2)
+    local startX = math.floor((termWidth - barWidth) / 2) + 1
     local steps = steps or 20
     local message = message or "Loading AegisOS"
-    local msgX = math.floor((termWidth - #message) / 2)
+    local msgX = math.floor((termWidth - #message) / 2) + 1
     term.setCursorPos(msgX, startY + 1)
     term.write(message)
     term.setCursorPos(startX, startY + 3)
@@ -88,14 +88,14 @@ function utils.renderLoadingBar(startY, width, steps, message)
         term.write("=")
         local percentage = math.floor((i / (barWidth - 2)) * 100)
         local versionText = "v" .. AegisOS.version .. " - " .. percentage .. "%"
-        local versionX = math.floor((termWidth - #versionText) / 2)
+        local versionX = math.floor((termWidth - #versionText) / 2) + 1
         term.setCursorPos(versionX, startY + 5)
         term.write(versionText)
         local sleepTime = 0.1 - (0.08 * (i / (barWidth - 2)))
         sleep(sleepTime)
     end
     local completionMessage = "System Initialization Complete"
-    local completionX = math.floor((termWidth - #completionMessage) / 2)
+    local completionX = math.floor((termWidth - #completionMessage) / 2) + 1
     term.setCursorPos(msgX, startY + 1)
     term.write(string.rep(" ", #message))
     term.setCursorPos(completionX, startY + 1)

@@ -1,7 +1,7 @@
 local config_module = {}
 
-function config_module.getConfig()
-    local config = AegisOS.utils.readFromJsonFile(AegisOS.paths.config)
+function config_module.getConfig(AegisOS)
+    local config = AegisOS.utils.readFromJsonFile(AegisOS, AegisOS.paths.config)
     local defaultConfig = {
         centerPoint = { x = 0, y = 0, z = 0 },
         muzzlePoint = { x = 0, y = 0, z = 0 },
@@ -29,61 +29,61 @@ function config_module.getConfig()
             if not config.redstoneDirections.power then config.redstoneDirections.power = defaultConfig.redstoneDirections.power end
         end
     end
-    AegisOS.config.saveConfig(config)
+    AegisOS.config.saveConfig(AegisOS, config)
     return config
 end
 
-function config_module.saveConfig(config)
-    return AegisOS.utils.writeToJsonFile(config, AegisOS.paths.config)
+function config_module.saveConfig(AegisOS, config)
+    return AegisOS.utils.writeToJsonFile(AegisOS, config, AegisOS.paths.config)
 end
 
-function config_module.modifyPoint(pointName, currentPoint)
-    AegisOS.utils.clearScreen()
+function config_module.modifyPoint(AegisOS, pointName, currentPoint)
+    AegisOS.utils.clearScreen(AegisOS)
     print("Current " .. pointName .. ": X: " .. (currentPoint.x or 0) .. ", Y: " .. (currentPoint.y or 0) .. ", Z: " .. (currentPoint.z or 0))
     print("\nEnter new values (leave blank to keep current):")
-    local x = AegisOS.ui.prompt("Enter X coordinate:")
+    local x = AegisOS.ui.prompt(AegisOS, "Enter X coordinate:")
     if x ~= "" then currentPoint.x = tonumber(x) end
-    local y = AegisOS.ui.prompt("Enter Y coordinate:")
+    local y = AegisOS.ui.prompt(AegisOS, "Enter Y coordinate:")
     if y ~= "" then currentPoint.y = tonumber(y) end
-    local z = AegisOS.ui.prompt("Enter Z coordinate:")
+    local z = AegisOS.ui.prompt(AegisOS, "Enter Z coordinate:")
     if z ~= "" then currentPoint.z = tonumber(z) end
     return currentPoint
 end
 
-function config_module.modifyPhysics(currentPhysics)
-    AegisOS.utils.clearScreen()
+function config_module.modifyPhysics(AegisOS, currentPhysics)
+    AegisOS.utils.clearScreen(AegisOS)
     print("Current Physics: Speed=" .. (currentPhysics.initialSpeed or 160.0) .. ", Barrel=" .. (currentPhysics.barrelLength or 9) .. ", Density=" .. (currentPhysics.environmentDensity or 1.0) .. ", Gravity=" .. (currentPhysics.gravityMultiplier or 1.0))
     print("\nEnter new values (leave blank to keep current):")
-    local speed = AegisOS.ui.prompt("Enter Initial Speed (default 160.0):")
+    local speed = AegisOS.ui.prompt(AegisOS, "Enter Initial Speed (default 160.0):")
     if speed ~= "" then currentPhysics.initialSpeed = tonumber(speed) end
-    local length = AegisOS.ui.prompt("Enter Barrel Length (default 9):")
+    local length = AegisOS.ui.prompt(AegisOS, "Enter Barrel Length (default 9):")
     if length ~= "" then currentPhysics.barrelLength = tonumber(length) end
-    local density = AegisOS.ui.prompt("Enter Environment Density (default 1.0):")
+    local density = AegisOS.ui.prompt(AegisOS, "Enter Environment Density (default 1.0):")
     if density ~= "" then currentPhysics.environmentDensity = tonumber(density) end
-    local gravity = AegisOS.ui.prompt("Enter Gravity Multiplier (default 1.0):")
+    local gravity = AegisOS.ui.prompt(AegisOS, "Enter Gravity Multiplier (default 1.0):")
     if gravity ~= "" then currentPhysics.gravityMultiplier = tonumber(gravity) end
     return currentPhysics
 end
 
-function config_module.modifyGearshiftIDs(currentIDs)
-    AegisOS.utils.clearScreen()
+function config_module.modifyGearshiftIDs(AegisOS, currentIDs)
+    AegisOS.utils.clearScreen(AegisOS)
     print("Current Gearshift IDs: Yaw=" .. (currentIDs.yaw or 0) .. ", Pitch=" .. (currentIDs.pitch or 0))
     print("\nEnter new values (leave blank to keep current):")
-    local yawId = AegisOS.ui.prompt("Enter Yaw Sequenced Gearshift Id:")
+    local yawId = AegisOS.ui.prompt(AegisOS, "Enter Yaw Sequenced Gearshift Id:")
     if yawId ~= "" then currentIDs.yaw = tonumber(yawId) end
-    local pitchId = AegisOS.ui.prompt("Enter Pitch Sequenced Gearshift Id:")
+    local pitchId = AegisOS.ui.prompt(AegisOS, "Enter Pitch Sequenced Gearshift Id:")
     if pitchId ~= "" then currentIDs.pitch = tonumber(pitchId) end
     return currentIDs
 end
 
-function config_module.modifyRedstoneDirection(currentDirections)
-    AegisOS.utils.clearScreen()
+function config_module.modifyRedstoneDirection(AegisOS, currentDirections)
+    AegisOS.utils.clearScreen(AegisOS)
     print("Current Redstone Directions: Trigger=" .. (currentDirections.trigger or "back") .. ", Power=" .. (currentDirections.power or "top"))
     print("\nEnter new values (leave blank to keep current):")
     local directionMatrix = { [1] = "top", [2] = "right", [3] = "bottom", [4] = "left", [5] = "back" }
-    local triggerDir = AegisOS.ui.prompt("Enter Redstone Directions for Trigger (1-5):")
+    local triggerDir = AegisOS.ui.prompt(AegisOS, "Enter Redstone Directions for Trigger (1-5):")
     if triggerDir ~= "" then currentDirections.trigger = directionMatrix[tonumber(triggerDir)] end
-    local powerDir = AegisOS.ui.prompt("Enter Redstone Directions for Power (1-5):")
+    local powerDir = AegisOS.ui.prompt(AegisOS, "Enter Redstone Directions for Power (1-5):")
     if powerDir ~= "" then currentDirections.power = directionMatrix[tonumber(powerDir)] end
     return currentDirections
 end
