@@ -26,7 +26,7 @@ return function(AegisOS)
     end
 
     local config = AegisOS.config.getConfig(AegisOS)
-    AegisOS.utils.redstoneToggle(AegisOS, config.redstoneDirections.power, true)
+    AegisOS.redstoneController.redstoneToggle(AegisOS, config.redstoneDirections.power, true)
 
     -- Main application loop
     while true do
@@ -46,7 +46,7 @@ return function(AegisOS)
         elseif choice == 4 then
             AegisOS.utils.clearScreen(AegisOS)
             print("Shutting down...")
-            AegisOS.utils.redstoneToggle(AegisOS, config.redstoneDirections.power, false)
+            AegisOS.redstoneController.redstoneToggle(AegisOS, config.redstoneDirections.power, false)
             sleep(2)
             AegisOS.utils.clearScreen(AegisOS)
             return

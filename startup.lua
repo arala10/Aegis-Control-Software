@@ -3,7 +3,7 @@ local scriptDir = scriptPath:match("(.*/)") or ""
 
 -- Initialize the main application object as a local variable.
 local AegisOS = {
-    version = "1.4.0",
+    version = "1.5.0",
     modules = {},
     apps = {},
     paths = {
@@ -31,6 +31,7 @@ AegisOS.config = dofile(scriptDir.."modules/config.lua")
 AegisOS.canon = dofile(scriptDir.."modules/canon.lua")
 AegisOS.ballistics = dofile(scriptDir.."modules/ballistics.lua")
 AegisOS.missions = dofile(scriptDir.."modules/missions.lua")
+AegisOS.redstoneController = dofile(scriptDir.."modules/redstoneController.lua")
 AegisOS.apps = dofile(scriptDir.."apps.lua")
 
 -- Load the main application function from main.lua

@@ -7,7 +7,7 @@ function config_module.getConfig(AegisOS)
         muzzlePoint = { x = 0, y = 0, z = 0 },
         physics = { initialSpeed = 160.0, barrelLength = 9, environmentDensity = 1.0, gravityMultiplier = 1.0 },
         gearShiftIDs = { yaw = 0, pitch = 1 },
-        redstoneDirections = { trigger = "back", power = "top" }
+        redstoneDirections = { trigger = {controllerSide = "right", linkSide = "back" }, power = {controllerSide = "right", linkSide = "top" }}
     }
     if not config then
         config = defaultConfig
@@ -78,7 +78,7 @@ end
 
 function config_module.modifyRedstoneDirection(AegisOS, currentDirections)
     AegisOS.utils.clearScreen(AegisOS)
-    print("Current Redstone Directions: Trigger=" .. (currentDirections.trigger or "back") .. ", Power=" .. (currentDirections.power or "top"))
+    -- print("Current Redstone Directions: Trigger=" .. "controller side is " .. (currentDirections.trigger.controllerSide) .. "" .. ", Power=" .. (currentDirections.power or "top"))
     print("\nEnter new values (leave blank to keep current):")
     local directionMatrix = { [1] = "top", [2] = "right", [3] = "bottom", [4] = "left", [5] = "back" }
     local triggerDir = AegisOS.ui.prompt(AegisOS, "Enter Redstone Directions for Trigger (1-5):")

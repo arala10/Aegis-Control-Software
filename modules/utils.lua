@@ -5,18 +5,6 @@ function utils.clearScreen(AegisOS)
     term.setCursorPos(1, 1)
 end
 
-function utils.redstoneBlink(AegisOS, side, duration)
-    sleep(duration / 2)
-    redstone.setOutput(side, not redstone.getOutput(side))
-    sleep(duration / 2)
-    redstone.setOutput(side, not redstone.getOutput(side))
-end
-
-function utils.redstoneToggle(AegisOS, side, toggle)
-    if redstone.getOutput(side) == toggle then return end
-    redstone.setOutput(side, toggle)
-end
-
 function utils.readFromJsonFile(AegisOS, filePath)
     if not fs.exists(filePath) then return {} end
     local file = fs.open(filePath, "r")
