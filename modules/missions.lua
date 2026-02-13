@@ -111,7 +111,7 @@ function missions_module.executeMissions(AegisOS)
         local yawData = { angle = yawAngle, id = config.gearShiftIDs.yaw }
         local pitchData = { angle = pitchAngle, id = config.gearShiftIDs.pitch }
         print("Moving cannon...")
-        AegisOS.canon.moveCanon(AegisOS, yawData, pitchData, config.redstoneDirections.trigger)
+        AegisOS.canon.moveCanon(AegisOS, yawData, pitchData, config.redstoneDirections)
         print("Fire mission completed!")
         if index < #missions then print("\nPress Enter for next mission..."); read() else sleep(2) end
     end

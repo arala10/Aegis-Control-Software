@@ -3,7 +3,7 @@ local scriptDir = scriptPath:match("(.*/)") or ""
 
 -- Initialize the main application object as a local variable.
 local AegisOS = {
-    version = "1.5.0",
+    version = "1.6.0",
     modules = {},
     apps = {},
     paths = {

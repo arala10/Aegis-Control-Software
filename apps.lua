@@ -45,16 +45,18 @@ function apps.parameterSettings(AegisOS)
     end
 end
 
+-- apps.lua
 function apps.manualOverride(AegisOS)
     AegisOS.ui.drawHeader(AegisOS, "Manual Override")
-    local yawAngle = tonumber(AegisOS.ui.prompt(AegisOS, "Insert Yaw:"))
-    local pitchAngle = tonumber(AegisOS.ui.prompt(AegisOS, "Insert Pitch:"))
+    local yawAngle = tonumber(AegisOS.ui.prompt(AegisOS, "Insert Yaw:")) or 0
+    local pitchAngle = tonumber(AegisOS.ui.prompt(AegisOS, "Insert Pitch:")) or 0
+    
     local config = AegisOS.config.getConfig(AegisOS)
     local yawData = { angle = yawAngle, id = config.gearShiftIDs.yaw }
     local pitchData = { angle = pitchAngle, id = config.gearShiftIDs.pitch }
-    local triggerSide = config.redstoneDirections.trigger
-    AegisOS.canon.moveCanon(AegisOS, yawData, pitchData, triggerSide)
-    AegisOS.ui.showMessage(AegisOS, "Manual movement completed.", 2)
+    
+    -- UPDATED: Passing the full redstoneDirections table
+    AegisOS.canon.moveCanon(AegisOS, yawData, pitchData, config.redstoneDirections)
 end
 
 return apps
