@@ -1,16 +1,9 @@
 local canon = {}
 
--- RATIOS
--- Coarse Mode: 1:8 (1 Canon Deg = 8 Motor Deg)
-local MOUNT_RATIO = 8
--- Precision Mode: 1:8 * 1:100 (1 Canon Deg = 800 Motor Deg)
-local PRECISION_RATIO = 800
-
-local modem = peripheral.wrap('bottom')
-
 function canon.getCurrentPosition(AegisOS)
     local config = AegisOS.config.getConfig(AegisOS)
     local readerName = config.blockReaderID or "blockReader_0"
+    local modem = peripheral.wrap(config.modemDirection or "bottom")
     
     local success, data = pcall(function() 
         return modem.callRemote(readerName, "getBlockData") 
@@ -20,11 +13,9 @@ function canon.getCurrentPosition(AegisOS)
     local currentPitch = 0
 
     if success and data then
-        -- Read Raw Degrees directly from NBT (Yaw/Pitch are standard for CBC Mount)
         currentYaw = data.Yaw or data.CannonYaw or 0
         currentPitch = data.Pitch or data.CannonPitch or 0
     else
-        -- Fallback to state file if Block Reader is missing or fails
         local state = AegisOS.utils.readFromJsonFile(AegisOS, AegisOS.paths.canonState)
         currentYaw = state.currentYaw or 0
         currentPitch = state.currentPitch or 0
@@ -41,7 +32,6 @@ function canon.savePosition(AegisOS, yaw, pitch)
 end
 
 function canon.calculateShortestPath(current, target)
-    -- Normalize to 0-360 range
     current = current % 360
     if current < 0 then current = current + 360 end
     target = target % 360
@@ -51,20 +41,21 @@ function canon.calculateShortestPath(current, target)
     local counterclockwiseDist = (current - target) % 360
     
     if clockwiseDist <= counterclockwiseDist then
-        return clockwiseDist, 1 -- 1 for clockwise
+        return clockwiseDist, 1
     else
-        return counterclockwiseDist, -1 -- -1 for counter-clockwise
+        return counterclockwiseDist, -1
     end
 end
 
 function canon.moveCanon(AegisOS, yawData, pitchData, redstoneSides)
+    local config = AegisOS.config.getConfig(AegisOS)
+    local modem = peripheral.wrap(config.modemDirection or "bottom")
+    local MOUNT_RATIO = config.mountRatio or 8
+    local PRECISION_RATIO = config.precisionRatio or 800
+
     local triggerSide = redstoneSides.trigger
     local precisionSide = redstoneSides.precision
-    
-    -- 1. Get Physical Position
     local startYaw, startPitch = AegisOS.canon.getCurrentPosition(AegisOS)
-    
-    -- 2. Calculate Total Movement Needed
     local yawDiff, yawMod = AegisOS.canon.calculateShortestPath(startYaw, yawData.angle)
     local pitchDiff = math.abs(pitchData.angle - startPitch)
     local pitchMod = (pitchData.angle > startPitch) and 1 or -1
@@ -75,15 +66,12 @@ function canon.moveCanon(AegisOS, yawData, pitchData, redstoneSides)
     print("--- FIRE MISSION ---")
     print(string.format("Target: Y %.3f, P %.3f", yawData.angle, pitchData.angle))
 
-    -- Extract Coarse (Integer) and Fine (Fractional) parts correctly
     local yawCoarse = math.floor(yawDiff)
     local yawFine = yawDiff - yawCoarse
 
     local pitchCoarse = math.floor(pitchDiff)
     local pitchFine = pitchDiff - pitchCoarse
 
-    -- === STAGE 1: COARSE MOVE (High Speed) ===
-    -- Ensure Precision Clutch is DISENGAGED
     if precisionSide then
         AegisOS.redstoneController.redstoneToggle(AegisOS, precisionSide, false) 
         sleep(0.2) 
@@ -98,24 +86,19 @@ function canon.moveCanon(AegisOS, yawData, pitchData, redstoneSides)
         if yRot > 0 then modem.callRemote(yawName, 'rotate', yRot, yawMod) end
         if pRot > 0 then modem.callRemote(pitchName, 'rotate', pRot, pitchMod) end
         
-        -- Wait for mechanical completion
         while modem.callRemote(yawName, "isRunning") or modem.callRemote(pitchName, "isRunning") do 
             sleep(0.05) 
         end
     end
 
-    sleep(5.0)
+    sleep(1.0)
 
-    -- === STAGE 2: FINE MOVE (Precision 1:100 Gear) ===
-    -- Only attempt if decimal adjustment is required and precision gear is configured
     if (yawFine > 0.0001 or pitchFine > 0.0001) and precisionSide then
-        -- ENGAGE Precision Clutch
         AegisOS.redstoneController.redstoneToggle(AegisOS, precisionSide, true)
-        sleep(1.0) 
+        sleep(1.5) 
 
         print(string.format(">> Fine: Yaw %.3f, Pitch %.3f", yawFine, pitchFine))
         
-        -- Use 800 Ratio (8 * 100)
         local yRotFine = math.floor(yawFine * PRECISION_RATIO + 0.5)
         local pRotFine = math.floor(pitchFine * PRECISION_RATIO + 0.5)
         
@@ -126,18 +109,15 @@ function canon.moveCanon(AegisOS, yawData, pitchData, redstoneSides)
             sleep(0.05) 
         end
 
-        -- DISENGAGE Precision Clutch
         AegisOS.redstoneController.redstoneToggle(AegisOS, precisionSide, false)
-        sleep(1.0)
+        sleep(1.5)
     end
 
-    -- 3. Trigger Firing Sequence
     if triggerSide then
         print(">> Firing!")
         AegisOS.redstoneController.redstoneBlink(AegisOS, triggerSide, 5)
     end
     
-    -- 4. Finalize
     AegisOS.canon.savePosition(AegisOS, yawData.angle, pitchData.angle)
     print("Mission complete.")
     sleep(1)

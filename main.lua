@@ -1,20 +1,10 @@
 return function(AegisOS)
     AegisOS.utils.clearScreen(AegisOS)
 
-    -- Ensure logo file exists in the data directory
-    if not fs.exists(AegisOS.paths.logo) and fs.exists("logo.txt") then
-        local logoFile = fs.open("logo.txt", "r")
-        local logoContent = logoFile.readAll()
-        logoFile.close()
-
-        if not fs.exists("data") then fs.makeDir("data") end
-
-        local destFile = fs.open(AegisOS.paths.logo, "w")
-        destFile.write(logoContent)
-        destFile.close()
+    if not fs.exists(AegisOS.paths.config) then
+        AegisOS.config.firstTimeSetup(AegisOS)
     end
 
-    -- Render startup sequence
     local success, lineAfterLogo = AegisOS.utils.renderCenteredAsciiArt(AegisOS, AegisOS.paths.logo)
     if success then
         AegisOS.utils.renderLoadingBar(AegisOS, lineAfterLogo, 30, 1, "Initializing AegisOS")
@@ -28,7 +18,6 @@ return function(AegisOS)
     local config = AegisOS.config.getConfig(AegisOS)
     AegisOS.redstoneController.redstoneToggle(AegisOS, config.redstoneDirections.power, true)
 
-    -- Main application loop
     while true do
         local choice = AegisOS.ui.showMenu(AegisOS, "Aegis Control System v" .. AegisOS.version, {
             "Fire Mission",

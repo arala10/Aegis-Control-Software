@@ -18,9 +18,9 @@ end
 function apps.parameterSettings(AegisOS)
     while true do
         local choice = AegisOS.ui.showMenu(AegisOS, "Modify Parameters", {
-            "Modify Center Point", "Modify Muzzle Point", "Modify Physics Parameters",
+            "Modify Center Point", "Modify Physics Parameters",
             "Modify GearShift IDs", "Modify Redstone Signal Directions",
-            "Calibrate Canon Position", "Return to Main Menu"
+            "Modify Canon Settings", "Calibrate Canon Position", "Return to Main Menu"
         })
         local config = AegisOS.config.getConfig(AegisOS)
         local saved = false
@@ -28,24 +28,23 @@ function apps.parameterSettings(AegisOS)
             config.centerPoint = AegisOS.config.modifyPoint(AegisOS, "Center Point", config.centerPoint)
             if AegisOS.config.saveConfig(AegisOS, config) then AegisOS.ui.showMessage(AegisOS, "Center Point updated successfully!", 2) else AegisOS.ui.showMessage(AegisOS, "Failed to update Center Point.", 2) end
         elseif choice == 2 then
-            config.muzzlePoint = AegisOS.config.modifyPoint(AegisOS, "Muzzle Point", config.muzzlePoint)
-            if AegisOS.config.saveConfig(AegisOS, config) then AegisOS.ui.showMessage(AegisOS, "Muzzle Point updated successfully!", 2) else AegisOS.ui.showMessage(AegisOS, "Failed to update Muzzle Point.", 2) end
-        elseif choice == 3 then
             config.physics = AegisOS.config.modifyPhysics(AegisOS, config.physics or {})
             if AegisOS.config.saveConfig(AegisOS, config) then AegisOS.ui.showMessage(AegisOS, "Physics Parameters updated successfully!", 2) else AegisOS.ui.showMessage(AegisOS, "Failed to update Physics Parameters.", 2) end
-        elseif choice == 4 then
+        elseif choice == 3 then
             config.gearShiftIDs = AegisOS.config.modifyGearshiftIDs(AegisOS, config.gearShiftIDs or {})
             if AegisOS.config.saveConfig(AegisOS, config) then AegisOS.ui.showMessage(AegisOS, "GearShift IDs updated successfully!", 2) else AegisOS.ui.showMessage(AegisOS, "Failed to update GearShift IDs.", 2) end
-        elseif choice == 5 then
+        elseif choice == 4 then
             config.redstoneDirections = AegisOS.config.modifyRedstoneDirection(AegisOS, config.redstoneDirections or {})
             if AegisOS.config.saveConfig(AegisOS, config) then AegisOS.ui.showMessage(AegisOS, "Redstone Directions updated successfully!", 2) else AegisOS.ui.showMessage(AegisOS, "Failed to update Redstone Directions.", 2) end
+        elseif choice == 5 then
+            config = AegisOS.config.modifyCanonSettings(AegisOS, config)
+            if AegisOS.config.saveConfig(AegisOS, config) then AegisOS.ui.showMessage(AegisOS, "Canon Settings updated successfully!", 2) else AegisOS.ui.showMessage(AegisOS, "Failed to update Canon Settings.", 2) end
         elseif choice == 6 then
             AegisOS.canon.calibrate(AegisOS)
         elseif choice == 7 then break end
     end
 end
 
--- apps.lua
 function apps.manualOverride(AegisOS)
     AegisOS.ui.drawHeader(AegisOS, "Manual Override")
     local yawAngle = tonumber(AegisOS.ui.prompt(AegisOS, "Insert Yaw:")) or 0
@@ -55,7 +54,6 @@ function apps.manualOverride(AegisOS)
     local yawData = { angle = yawAngle, id = config.gearShiftIDs.yaw }
     local pitchData = { angle = pitchAngle, id = config.gearShiftIDs.pitch }
     
-    -- UPDATED: Passing the full redstoneDirections table
     AegisOS.canon.moveCanon(AegisOS, yawData, pitchData, config.redstoneDirections)
 end
 

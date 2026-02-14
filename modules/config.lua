@@ -1,12 +1,11 @@
 local config_module = {}
 
--- Returns the full configuration table, merging with defaults if keys are missing
 function config_module.getConfig(AegisOS)
     local config = AegisOS.utils.readFromJsonFile(AegisOS, AegisOS.paths.config)
     
     local defaultConfig = {
         centerPoint = { x = 0, y = 0, z = 0 },
-        muzzlePoint = { x = 0, y = 0, z = 0 },
+        canonDefaultDirection = "North",
         physics = { initialSpeed = 160.0, barrelLength = 9, environmentDensity = 1.0, gravityMultiplier = 1.0 },
         gearShiftIDs = { yaw = 0, pitch = 1 },
         redstoneDirections = { 
@@ -14,21 +13,25 @@ function config_module.getConfig(AegisOS)
             power = { controllerSide = "right", linkSide = "top" },
             precision = { controllerSide = "right", linkSide = "front" }
         },
-        blockReaderID = "blockReader_0"
+        blockReaderID = "blockReader_0",
+        modemDirection = "bottom",
+        mountRatio = 8,
+        precisionRatio = 800
     }
 
     if not config or next(config) == nil then
         config = defaultConfig
     else
-        -- Ensure sub-tables exist to prevent nil errors
         config.centerPoint = config.centerPoint or defaultConfig.centerPoint
-        config.muzzlePoint = config.muzzlePoint or defaultConfig.muzzlePoint
+        config.canonDefaultDirection = config.canonDefaultDirection or defaultConfig.canonDefaultDirection
         config.physics = config.physics or defaultConfig.physics
         config.gearShiftIDs = config.gearShiftIDs or defaultConfig.gearShiftIDs
         config.redstoneDirections = config.redstoneDirections or defaultConfig.redstoneDirections
         config.blockReaderID = config.blockReaderID or defaultConfig.blockReaderID
+        config.modemDirection = config.modemDirection or defaultConfig.modemDirection
+        config.mountRatio = config.mountRatio or defaultConfig.mountRatio
+        config.precisionRatio = config.precisionRatio or defaultConfig.precisionRatio
         
-        -- Ensure the new precision key exists
         if not config.redstoneDirections.precision then
             config.redstoneDirections.precision = defaultConfig.redstoneDirections.precision
         end
@@ -83,7 +86,6 @@ function config_module.modifyBlockReaderID(AegisOS, currentID)
     return (newID ~= "") and newID or currentID
 end
 
--- Simplified Wizard for Redstone Links and Computer Sides
 function config_module.modifyRedstoneDirection(AegisOS, currentDirections)
     local function configureSignal(label, data)
         AegisOS.utils.clearScreen(AegisOS)
@@ -141,6 +143,81 @@ function config_module.modifyRedstoneDirection(AegisOS, currentDirections)
         end
     end
     return currentDirections
+end
+
+function config_module.modifyCanonSettings(AegisOS, config)
+    while true do
+        local choice = AegisOS.ui.showMenu(AegisOS, "Canon Settings", {
+            "Mount Ratio: " .. config.mountRatio,
+            "Precision Ratio: " .. config.precisionRatio,
+            "Modem Direction: " .. config.modemDirection,
+            "Canon Default Direction: " .. config.canonDefaultDirection,
+            "Back"
+        })
+
+        if choice == 1 then
+            local newMountRatio = AegisOS.ui.prompt(AegisOS, "Enter new Mount Ratio:")
+            if newMountRatio ~= "" then config.mountRatio = tonumber(newMountRatio) end
+        elseif choice == 2 then
+            local newPrecisionRatio = AegisOS.ui.prompt(AegisOS, "Enter new Precision Ratio:")
+            if newPrecisionRatio ~= "" then config.precisionRatio = tonumber(newPrecisionRatio) end
+        elseif choice == 3 then
+            local newModemDirection = AegisOS.ui.prompt(AegisOS, "Enter new Modem Direction:")
+            if newModemDirection ~= "" then config.modemDirection = newModemDirection end
+        elseif choice == 4 then
+            local directions = {"North", "East", "South", "West"}
+            local directionChoice = AegisOS.ui.showMenu(AegisOS, "Select Canon Default Direction", directions)
+            config.canonDefaultDirection = directions[directionChoice]
+        elseif choice == 5 then
+            break
+        end
+    end
+    return config
+end
+
+function config_module.firstTimeSetup(AegisOS)
+    local config = config_module.getConfig(AegisOS)
+
+    AegisOS.utils.clearScreen(AegisOS)
+    print("First Time Setup")
+    print("Attempting to find peripherals...")
+    sleep(2)
+
+    local blockReader = peripheral.find("blockReader")
+    if blockReader then
+        config.blockReaderID = peripheral.getName(blockReader)
+        print("Block Reader found: " .. config.blockReaderID)
+    else
+        print("Block Reader not found.")
+        config.blockReaderID = AegisOS.ui.prompt(AegisOS, "Enter Block Reader ID:")
+    end
+
+    local modem = peripheral.find("modem")
+    if modem then
+        config.modemDirection = peripheral.getName(modem)
+        print("Modem found: " .. config.modemDirection)
+    else
+        print("Modem not found.")
+        config.modemDirection = AegisOS.ui.prompt(AegisOS, "Enter Modem side:")
+    end
+    sleep(2)
+
+    AegisOS.utils.clearScreen(AegisOS)
+    print("Initial peripheral setup complete.")
+    print("You will now be guided through the rest of the configuration.")
+    sleep(3)
+
+    config.centerPoint = AegisOS.config.modifyPoint(AegisOS, "Center Point", config.centerPoint)
+    config.physics = AegisOS.config.modifyPhysics(AegisOS, config.physics or {})
+    config.gearShiftIDs = AegisOS.config.modifyGearshiftIDs(AegisOS, config.gearShiftIDs or {})
+    config.redstoneDirections = AegisOS.config.modifyRedstoneDirection(AegisOS, config.redstoneDirections or {})
+    config = AegisOS.config.modifyCanonSettings(AegisOS, config)
+
+    if AegisOS.config.saveConfig(AegisOS, config) then
+        AegisOS.ui.showMessage(AegisOS, "Configuration saved successfully!", 2)
+    else
+        AegisOS.ui.showMessage(AegisOS, "Failed to save configuration.", 2)
+    end
 end
 
 return config_module

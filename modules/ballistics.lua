@@ -1,13 +1,11 @@
 local ballistics = {}
 
-function ballistics.simulateProjectile(AegisOS, start_pos, initial_velocity, env_density, gravity_multiplier, targetY, verbose)
+function ballistics.simulateProjectile(AegisOS, start_pos, initial_velocity, env_density, gravity_multiplier, targetY)
     local pos = vector.new(start_pos[1], start_pos[2], start_pos[3])
     local vel = vector.new(initial_velocity[1], initial_velocity[2], initial_velocity[3])
     local gravity = vector.new(0, -gravity_multiplier * AegisOS.constants.GRAVITY, 0)
     local trajectory = { {x=pos.x, y=pos.y, z=pos.z} }
     
-    if verbose == nil then verbose = false end
-
     for tick = 1, AegisOS.constants.MAX_ITERATIONS do
         if (vel.x^2 + vel.y^2 + vel.z^2) < 1e-6 then break end
         
@@ -31,7 +29,6 @@ function ballistics.simulateProjectile(AegisOS, start_pos, initial_velocity, env
         
         pos = next_pos
         vel = next_vel
-        table.insert(trajectory, {x=pos.x, y=pos.y, z=pos.z})
     end
     return trajectory
 end
@@ -95,7 +92,17 @@ end
 function ballistics.findYaw(AegisOS, targetPoint)
     local config = AegisOS.config.getConfig(AegisOS)
     local basePoint = vector.new(config.centerPoint.x, 0, config.centerPoint.z)
-    local muzzleEndPoint = vector.new(config.muzzlePoint.x, 0, config.muzzlePoint.z)
+    
+    local muzzleEndPoint = vector.new(config.centerPoint.x, 0, config.centerPoint.z)
+    if config.canonDefaultDirection == "North" then
+        muzzleEndPoint.z = muzzleEndPoint.z - config.physics.barrelLength
+    elseif config.canonDefaultDirection == "East" then
+        muzzleEndPoint.x = muzzleEndPoint.x + config.physics.barrelLength
+    elseif config.canonDefaultDirection == "South" then
+        muzzleEndPoint.z = muzzleEndPoint.z + config.physics.barrelLength
+    elseif config.canonDefaultDirection == "West" then
+        muzzleEndPoint.x = muzzleEndPoint.x - config.physics.barrelLength
+    end
     
     local forwardVector = (muzzleEndPoint - basePoint):normalize()
     local targetVector = (targetPoint - basePoint):normalize()
