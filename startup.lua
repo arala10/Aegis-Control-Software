@@ -2,7 +2,7 @@ local scriptPath = debug.getinfo(1, "S").source:sub(2)
 local scriptDir = scriptPath:match("(.*/)") or ""
 
 local AegisOS = {
-    version = "1.6.0",
+    version = "1.7.0",
     paths = {
         config = scriptDir.."data/config.json",
         missionTable = scriptDir.."data/mission_table.json",
